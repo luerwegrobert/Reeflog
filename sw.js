@@ -1,6 +1,6 @@
 // Service Worker: macht Reeflog offline nutzbar.
 // Bei Änderungen an der App die Versionsnummer erhöhen (z. B. reeflog-v2).
-const CACHE = 'reeflog-v1';
+const CACHE = 'reeflog-v2';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', event => {
