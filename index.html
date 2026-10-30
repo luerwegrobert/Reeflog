@@ -112,8 +112,8 @@
         .nav-tabs {
             display: flex;
             justify-content: center;
-            gap: 8px;
-            padding: 0 15px;
+            gap: 4px;
+            padding: 0 8px;
             margin-bottom: 20px;
         }
 
@@ -121,15 +121,19 @@
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: var(--text-muted);
-            padding: 10px 16px;
+            padding: 9px 7px;
             border-radius: 20px;
-            font-size: 0.9rem;
+            font-size: 0.72rem;
+            flex: 0 1 auto;
+            min-width: 0;
+            justify-content: center;
+            white-space: nowrap;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
         }
 
         .tab-btn.active {
@@ -706,7 +710,8 @@
 
     <div class="nav-tabs">
         <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-        <button class="tab-btn" data-tab="input" onclick="switchTab('input')">➕ Eintrag</button>
+        <button class="tab-btn" data-tab="input" onclick="switchTab('input')">➕ Messwerte</button>
+        <button class="tab-btn" data-tab="dosing" onclick="switchTab('dosing')">🧪 Dosierungen</button>
         <button class="tab-btn" data-tab="gallery" onclick="switchTab('gallery')">📸 Galerie</button>
     </div>
 
@@ -784,11 +789,6 @@
                 </div>
             </div>
 
-            <details class="glass-panel" id="productSettings">
-                <summary style="cursor: pointer; font-weight: 700;">🧪 Produkte &amp; Dosierung</summary>
-                <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Trage hier deine eigenen Produkte ein, so wie auf dem Etikett angegeben, z. B. „1 ml erhöht KH um 0,1 dKH in 100 Litern“. Alle Mengenangaben in den Empfehlungen werden daraus berechnet.</div>
-                <div id="productRows"></div>
-            </details>
 
             <details class="glass-panel" id="backupPanel">
                 <summary style="cursor: pointer; font-weight: 700;">💾 Datensicherung (Backup)</summary>
@@ -807,6 +807,15 @@
                 <textarea id="backupText" class="input-styled" rows="3" placeholder="… oder kopiertes Backup hier einfügen" style="margin-top: 8px; font-size: 0.8rem;"></textarea>
                 <button type="button" class="btn-note" onclick="restoreFromText(document.getElementById('backupText').value)">⬆️ Aus eingefügtem Text einspielen</button>
             </details>
+        </div>
+
+        <!-- DOSIERUNGEN TAB -->
+        <div id="dosing" class="tab-content">
+            <div class="glass-panel" id="productSettings">
+                <h2 style="font-size:1.1rem; margin-bottom:6px;">🧪 Produkte &amp; Dosierung</h2>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Trage hier deine eigenen Produkte ein, so wie auf dem Etikett angegeben, z. B. „1 ml erhöht KH um 0,1 dKH in 100 Litern“. Bei KH, Calcium, Nitrat und Phosphat kannst du zusätzlich deine aktuelle Tagesdosis eintragen. Alle Mengenangaben in den Empfehlungen werden daraus berechnet.</div>
+                <div id="productRows"></div>
+            </div>
         </div>
 
         <!-- INPUT TAB -->
@@ -984,6 +993,7 @@
             
             document.getElementById(tabId).classList.add('active');
             if (tabId === 'input' && formIsEmpty()) setFormNow();
+            if (tabId === 'dosing') renderProductSettings();
             
             if (tabId === 'dashboard') {
                 setTimeout(() => { if(myChart) myChart.update(); }, 50);
@@ -1443,16 +1453,24 @@
                 const dir = isLow ? 'low' : (isHigh ? 'high' : null);
                 if (!dir) return;
                 const border = false;
-                items.push({ k, v, dir, border, plan: border ? null : buildPlan(k, v, dir), meta: meta[k] });
+                let plan = buildPlan(k, v, dir);
+                if (plan) {
+                    const noSteps = (k === 'ca' || k === 'kh') || ((k === 'no3' || k === 'po4') && hasDaily(k, dir === 'low' ? 'up' : 'down'));
+                    if (noSteps) { plan.steps = []; plan.more = false; plan.noSteps = true; }
+                }
+                items.push({ k, v, dir, border, plan, meta: meta[k] });
             });
             return { L, items, inter: computeInteractions(L) };
         }
 
         // Tagesdosis: Anpassung der eigenen Erhaltungsdosis um 15 % (üblicher Richtwert, danach nachmessen)
         const DAILY_PCT = 0.15;
+        const DAILY_PARAMS = ['kh', 'ca', 'no3', 'po4'];
+        function hasDaily(k, slot) { const p = appSettings.products[k + '_' + slot]; return !!(p && p.name && p.daily > 0); }
         function dailyAdvice(it) {
             const k = it.k, cfg = thresholds[k], V = appSettings.volume;
             const out = [];
+            if (!DAILY_PARAMS.includes(k)) return out;
             const jobs = [];
             if (it.dir === 'low') jobs.push(['up', +1]);
             else if (k === 'no3' || k === 'po4') { jobs.push(['down', +1]); jobs.push(['up', -1]); }
@@ -1468,7 +1486,7 @@
                 const effTxt = eff ? ` Das ändert ${cfg.label} rechnerisch um etwa ${fmtNum(eff)} ${cfg.unit} pro Tag.` : '';
                 out.push(`${p.name}: Tagesdosis von ${fmtNum(Math.round(p.daily * 100) / 100)} ${u} auf ${fmtNum(Math.round(neu * 100) / 100)} ${u} ${sign > 0 ? 'erhöhen' : 'reduzieren'} (${sign > 0 ? '+' : '−'}${Math.round(DAILY_PCT * 100)} %).${effTxt}`);
             });
-            if (!out.length && missing) out.push('Trage unter „Produkte & Dosierung“ deine aktuelle Tagesdosis ein, dann zeige ich dir hier die neue Tagesdosis.');
+            if (!out.length && missing) out.push('Trage unter „Dosierungen“ deine aktuelle Tagesdosis ein, dann zeige ich dir hier die neue Tagesdosis.');
             return out;
         }
 
@@ -1500,8 +1518,9 @@
                 if (P.more) out.push('Danach weiter nach der Nachmessung.');
                 out.push(`Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt.`);
             }
+            if (!P.steps.length && P.daily.length && P.target) out.push(P.target);
             P.daily.forEach(x => out.push('Tagesdosis: ' + x));
-            if (P.needProduct) out.push('Für Mengenangaben dein Produkt und das Nettovolumen in der App unter „Produkte & Dosierung“ eintragen.');
+            if (P.needProduct) out.push('Für Mengenangaben dein Produkt und das Nettovolumen in der App im Reiter „Dosierungen“ eintragen.');
             if (P.tip) out.push(P.tip);
             P.inter.forEach(x => out.push('Wechselwirkung: ' + x.text));
             if (P.trend) out.push(P.trend);
@@ -1526,12 +1545,12 @@
                     <div class="rec-sec"><b>Mögliche Ursachen</b><br>${kb.ursache}</div>
                     <div class="rec-sec"><b>Was du tun kannst</b><br>${kb.massn}</div>
                     ${steps ? `<div class="rec-sec"><b>Schrittplan</b> <span class="rec-meta">(${P.target}${P.limit ? ' · Grenze: ' + P.limit : ''})</span><ol class="rec-steps">${steps}</ol>${P.more ? '<div class="rec-meta">Danach weiter nach der Nachmessung.</div>' : ''}<div class="rec-meta">Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt. Beachte die Anwendungshinweise deines Herstellers.</div></div>` : ''}
-                    ${P.daily.length ? `<div class="rec-sec"><b>Tagesdosis anpassen</b>${P.daily.map(x => `<div>${escapeHtml(x)}</div>`).join('')}<div class="rec-meta">Zusätzlich zum Schrittplan oben. Nach 3–7 Tagen nachmessen und bei Bedarf erneut anpassen.</div></div>` : ''}
-                    ${P.needProduct ? '<div class="rec-info">Für Mengenangaben trage dein Produkt und das Nettovolumen unter <span class="rec-link" onclick="openProducts()">Produkte &amp; Dosierung</span> ein.</div>' : ''}
+                    ${P.daily.length ? `<div class="rec-sec"><b>Tagesdosis anpassen</b>${P.target && !steps ? ` <span class="rec-meta">(${P.target})</span>` : ''}${P.daily.map(x => `<div>${escapeHtml(x)}</div>`).join('')}<div class="rec-meta">${steps ? 'Zusätzlich zum Schrittplan oben. ' : ''}Nach 3–7 Tagen nachmessen und bei Bedarf erneut anpassen.</div></div>` : ''}
+                    ${P.needProduct ? '<div class="rec-info">Für Mengenangaben trage dein Produkt und das Nettovolumen im Reiter <span class="rec-link" onclick="openProducts()">Dosierungen</span> ein.</div>' : ''}
                     ${P.tip ? `<div class="rec-info">${P.tip}</div>` : ''}
                     ${P.inter.map(x => `<div class="${x.level === 'warn' ? 'rec-warn' : 'rec-info'}">${x.text}</div>`).join('')}
                     ${P.trend ? `<div class="rec-info">${P.trend}</div>` : ''}
-                    ${steps ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Schritt 1 als Maßnahme eintragen</button>` : ''}
+                    ${steps ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Schritt 1 als Maßnahme eintragen</button>` : (P.daily.some(x => x.includes('Tagesdosis von')) ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Tagesdosis-Änderung als Maßnahme eintragen</button>` : '')}
                 </div>
             </details>`;
         }
@@ -1550,8 +1569,11 @@
         function logAction(k) {
             const rd = buildRecs();
             const it = rd.items.find(x => x.k === k);
-            if (!it || !it.plan || !it.plan.steps.length) return;
-            const line = actionLine(k, it.plan.steps[0]);
+            if (!it) return;
+            let line = null;
+            if (it.plan && it.plan.steps.length) line = actionLine(k, it.plan.steps[0]);
+            else { const dl = dailyAdvice(it).find(x => x.includes('Tagesdosis von')); if (dl) line = dl.split('. Das ändert')[0]; }
+            if (!line) return;
             if (!confirm('Maßnahme eintragen?\n\n' + line)) return;
             const d = new Date();
             const vals = {};
@@ -1572,9 +1594,8 @@
         }
 
         function openProducts() {
-            const d = document.getElementById('productSettings');
-            d.open = true;
-            d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            switchTab('dosing');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function setVolume(v) {
@@ -1614,11 +1635,11 @@
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
                             <span>Litern</span>
                         </div>
-                        <div class="prod-line">
+                        ${DAILY_PARAMS.includes(k) ? `<div class="prod-line">
                             <span>Meine Tagesdosis:</span>
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onchange="setProduct('${slot}','daily',this.value)">
                             <span>${escapeHtml(p.unit || 'ml')} pro Tag (für dein Nettovolumen)</span>
-                        </div>
+                        </div>` : ''}
                     </div>`;
                 });
             });
