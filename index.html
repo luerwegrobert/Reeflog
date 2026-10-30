@@ -632,6 +632,12 @@
         }
 
         /* PDF & Action Buttons layout */
+        .sub-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
+        .sub-nav button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.66rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .sub-nav button .sn-ico { font-size: 1.15rem; line-height: 1; }
+        .sub-nav button.active { background: linear-gradient(135deg, rgba(79,227,238,0.2), rgba(42,143,168,0.2)); border-color: var(--color-sal); color: #fff; }
+        .sub-badge { display: none; position: absolute; top: 3px; right: 5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff0844; color: #fff; font-style: normal; font-size: 0.62rem; line-height: 16px; text-align: center; }
+        .sub-back { background: none; border: none; color: var(--color-sal); font-size: 0.85rem; font-weight: 600; padding: 4px 0 12px; cursor: pointer; font-family: inherit; }
         .action-row {
             display: flex;
             gap: 10px;
@@ -718,32 +724,18 @@
 
         <!-- DASHBOARD TAB -->
         <div id="dashboard" class="tab-content active">
-            <div class="action-row">
-                <button class="btn-submit" style="margin-top:0;" onclick="createReport()">📄 PDF Report erstellen</button>
+            <div class="sub-nav" id="subNav">
+                <button type="button" data-sub="rec" onclick="showSub('rec')"><span class="sn-ico">💡</span><span>Empfehlungen</span><i class="sub-badge" id="badgeRec"></i></button>
+                <button type="button" data-sub="hist" onclick="showSub('hist')"><span class="sn-ico">📜</span><span>Historie</span></button>
+                <button type="button" data-sub="rem" onclick="showSub('rem')"><span class="sn-ico">⏰</span><span>Erinnerungen</span><i class="sub-badge" id="badgeRem"></i></button>
+                <button type="button" data-sub="bak" onclick="showSub('bak')"><span class="sn-ico">💾</span><span>Backup</span></button>
             </div>
-
-            <div class="glass-panel" id="dueBanner" style="display: none;">
-                <div class="panel-title">⏰ Messung fällig</div>
-                <div id="dueList"></div>
-            </div>
-
-            <details class="glass-panel" id="reminderSettings">
-                <summary id="remSummary" style="cursor: pointer; font-weight: 700;">⏰ Messerinnerungen einstellen</summary>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Alle wie viele Tage soll gemessen werden? Feld leer lassen = keine Erinnerung. Fällige Messungen zeigt die App oben im Dashboard an.</div>
-                <div id="reminderRows"></div>
-                            </details>
-
+            <div data-sub="main">
             <div class="glass-panel">
                 <div class="panel-title">🟢 Aktueller Beckenstatus</div>
                 <div class="dashboard-grid" id="dashboardValues">
                     <!-- Dynamic rendering via JS -->
                 </div>
-            </div>
-
-            <div class="glass-panel" id="recPanel" style="display: none;">
-                <div class="panel-title">💡 Empfehlungen</div>
-                <div id="recList"></div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">Orientierung auf Basis gängiger Faustwerte der Riffaquaristik und deiner eigenen Produktangaben, keine Garantie. Beachte immer die Anwendungshinweise deiner Produkte.</div>
             </div>
 
             <div class="glass-panel">
@@ -764,11 +756,22 @@
                 <div class="chart-hint" id="chartHint"></div>
             </div>
 
-            <div class="glass-panel" id="diaryPanel" style="display: none;">
-                <div class="panel-title">📔 Tagebuch – letzte Notizen</div>
-                <div id="diaryList"></div>
+            <div class="action-row">
+                <button class="btn-submit" style="margin-top:0;" onclick="createReport()">📄 PDF Report erstellen</button>
             </div>
 
+            </div>
+            <div data-sub="rec" style="display:none;">
+<button type="button" class="sub-back" onclick="showSub('')">← Zurück zur Übersicht</button>
+            <div class="glass-panel" id="recPanel" style="display: none;">
+                <div class="panel-title">💡 Empfehlungen</div>
+                <div id="recList"></div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">Orientierung auf Basis gängiger Faustwerte der Riffaquaristik und deiner eigenen Produktangaben, keine Garantie. Beachte immer die Anwendungshinweise deiner Produkte.</div>
+            </div>
+
+            </div>
+            <div data-sub="hist" style="display:none;">
+<button type="button" class="sub-back" onclick="showSub('')">← Zurück zur Übersicht</button>
             <div class="glass-panel">
                 <div class="panel-title">📋 Historische Dokumentation</div>
                 <div class="table-responsive">
@@ -789,6 +792,23 @@
             </div>
 
 
+            </div>
+            <div data-sub="rem" style="display:none;">
+<button type="button" class="sub-back" onclick="showSub('')">← Zurück zur Übersicht</button>
+            <div class="glass-panel" id="dueBanner" style="display: none;">
+                <div class="panel-title">⏰ Messung fällig</div>
+                <div id="dueList"></div>
+            </div>
+
+            <details class="glass-panel" id="reminderSettings" open>
+                <summary id="remSummary" style="cursor: pointer; font-weight: 700;">⏰ Messerinnerungen einstellen</summary>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Alle wie viele Tage soll gemessen werden? Feld leer lassen = keine Erinnerung. Fällige Messungen erscheinen hier und als Zahl am Erinnerungen-Knopf an.</div>
+                <div id="reminderRows"></div>
+                            </details>
+
+            </div>
+            <div data-sub="bak" style="display:none;">
+<button type="button" class="sub-back" onclick="showSub('')">← Zurück zur Übersicht</button>
             <details class="glass-panel" id="backupPanel">
                 <summary style="cursor: pointer; font-weight: 700;">💾 Datensicherung (Backup)</summary>
                 <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Deine Einträge, Notizen und Fotos liegen nur auf diesem Gerät im Speicher der App. Sichere sie regelmäßig, damit dein Verlauf nicht verloren geht, z. B. beim Gerätewechsel oder wenn die Browserdaten gelöscht werden.</div>
@@ -806,6 +826,7 @@
                 <textarea id="backupText" class="input-styled" rows="3" placeholder="… oder kopiertes Backup hier einfügen" style="margin-top: 8px; font-size: 0.8rem;"></textarea>
                 <button type="button" class="btn-note" onclick="restoreFromText(document.getElementById('backupText').value)">⬆️ Aus eingefügtem Text einspielen</button>
             </details>
+            </div>
         </div>
 
         <!-- DOSIERUNGEN TAB -->
@@ -962,7 +983,21 @@
             return new Date(`${r.date}T${r.time || '12:00'}`).getTime();
         }
 
+        let curSub = '';
+        function showSub(name) {
+            curSub = (name && curSub === name) ? '' : (name || '');
+            document.querySelectorAll('#dashboard > [data-sub]').forEach(el => {
+                if (el.classList.contains('sub-nav')) return;
+                el.style.display = (el.dataset.sub === (curSub || 'main')) ? '' : 'none';
+            });
+            document.querySelectorAll('#subNav button').forEach(b => b.classList.toggle('active', b.dataset.sub === curSub));
+            if (!curSub) setTimeout(() => { if (myChart) myChart.update(); updateChart(); }, 50);
+            window.scrollTo({ top: 0 });
+        }
+        function setBadge(id, n) { const b = document.getElementById(id); if (!b) return; b.textContent = n; b.style.display = n ? 'block' : 'none'; }
+
         function switchTab(tabId) {
+            if (tabId === 'dashboard' && curSub) showSub('');
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === tabId));
             
@@ -1151,6 +1186,7 @@
 
         function renderDiary() {
             const panel = document.getElementById('diaryPanel');
+            if (!panel) return;
             const notes = records.filter(r => r.note).sort((a, b) => recTs(b) - recTs(a)).slice(0, 5);
             panel.style.display = notes.length ? 'block' : 'none';
             document.getElementById('diaryList').innerHTML = notes.map(r =>
@@ -1215,6 +1251,7 @@
             const active = Object.keys(reminders).filter(k => thresholds[k]).length;
             document.getElementById('remSummary').textContent = active ? `⏰ Messerinnerungen (${active} aktiv) – einstellen` : '⏰ Messerinnerungen einstellen';
             panel.style.display = items.length ? 'block' : 'none';
+            setBadge('badgeRem', items.length);
             document.getElementById('dueList').innerHTML = items.map(i => `<div class="due-item">${i.html}</div>`).join('');
         }
 
@@ -1532,8 +1569,9 @@
         function renderRecommendations() {
             const panel = document.getElementById('recPanel');
             if (!panel) return;
-            if (!records.some(r => r.values && Object.keys(r.values).some(k => r.values[k]))) { panel.style.display = 'none'; return; }
+            if (!records.some(r => r.values && Object.keys(r.values).some(k => r.values[k]))) { panel.style.display = 'none'; setBadge('badgeRec', 0); return; }
             const rd = buildRecs();
+            setBadge('badgeRec', rd.items.length);
             panel.style.display = 'block';
             const warns = rd.inter.filter(x => x.level === 'warn').map(x => `<div class="rec-warn">⚠️ ${x.text}</div>`).join('');
             const body = rd.items.length ? rd.items.map(it => recItemHtml(it, rd)).join('') : '<div class="rec-meta" style="font-size:0.9rem;">✅ Alle zuletzt gemessenen Werte liegen im Sollbereich.</div>';
