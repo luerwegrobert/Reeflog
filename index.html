@@ -851,44 +851,44 @@
                     <div class="form-row-grid">
                         <div class="form-group">
                             <label style="color:var(--color-kh)">KH (°dKH)</label>
-                            <input type="number" step="0.1" id="val_kh" class="input-styled" placeholder="z.B. 7.5">
+                            <input type="number" step="any" inputmode="decimal" id="val_kh" class="input-styled" placeholder="z.B. 7.5">
                         </div>
                         <div class="form-group">
                             <label style="color:var(--color-sal)">Salzgehalt (psu / ‰)</label>
-                            <input type="number" step="0.1" id="val_sal" class="input-styled" placeholder="z.B. 35">
+                            <input type="number" step="any" inputmode="decimal" id="val_sal" class="input-styled" placeholder="z.B. 35">
                         </div>
                     </div>
 
                     <div class="form-row-grid">
                         <div class="form-group">
                             <label style="color:var(--color-ca)">Calcium (mg/l)</label>
-                            <input type="number" step="1" id="val_ca" class="input-styled" placeholder="z.B. 420">
+                            <input type="number" step="any" inputmode="decimal" id="val_ca" class="input-styled" placeholder="z.B. 420">
                         </div>
                         <div class="form-group">
                             <label style="color:var(--color-mg)">Magnesium (mg/l)</label>
-                            <input type="number" step="1" id="val_mg" class="input-styled" placeholder="z.B. 1350">
+                            <input type="number" step="any" inputmode="decimal" id="val_mg" class="input-styled" placeholder="z.B. 1350">
                         </div>
                     </div>
 
                     <div class="form-row-grid">
                         <div class="form-group">
                             <label style="color:var(--color-no3)">Nitrat (mg/l)</label>
-                            <input type="number" step="0.1" id="val_no3" class="input-styled" placeholder="z.B. 5.0">
+                            <input type="number" step="any" inputmode="decimal" id="val_no3" class="input-styled" placeholder="z.B. 5.0">
                         </div>
                         <div class="form-group">
                             <label style="color:var(--color-po4)">Phosphat (mg/l)</label>
-                            <input type="number" step="0.01" id="val_po4" class="input-styled" placeholder="z.B. 0.04">
+                            <input type="number" step="any" inputmode="decimal" id="val_po4" class="input-styled" placeholder="z.B. 0.04">
                         </div>
                     </div>
 
                     <div class="form-row-grid">
                         <div class="form-group">
                             <label style="color:var(--color-temp)">Temperatur (°C)</label>
-                            <input type="number" step="0.1" id="val_temp" class="input-styled" placeholder="z.B. 25.0">
+                            <input type="number" step="any" inputmode="decimal" id="val_temp" class="input-styled" placeholder="z.B. 25.0">
                         </div>
                         <div class="form-group">
                             <label style="color:var(--color-ph)">pH-Wert</label>
-                            <input type="number" step="0.05" id="val_ph" class="input-styled" placeholder="z.B. 8.2">
+                            <input type="number" step="any" inputmode="decimal" id="val_ph" class="input-styled" placeholder="z.B. 8.2">
                         </div>
                     </div>
 
@@ -932,11 +932,11 @@
         // Thresholds structure definitions
         const thresholds = {
             sal: { minOpt: 34, maxOpt: 36, minTol: 33, maxTol: 37, label: "Salinität", unit: "psu" },
-            kh: { minOpt: 7.4, maxOpt: 8.2, minTol: 6.5, maxTol: 8.5, label: "KH", unit: "°dKH" },
-            ca: { minOpt: 400, maxOpt: 440, minTol: 380, maxTol: 460, label: "Calcium", unit: "mg/l" },
+            kh: { minOpt: 7.4, maxOpt: 8.3, minTol: 6.8, maxTol: 8.5, label: "KH", unit: "°dKH" },
+            ca: { minOpt: 410, maxOpt: 435, minTol: 400, maxTol: 445, label: "Calcium", unit: "mg/l" },
             mg: { minOpt: 1300, maxOpt: 1400, minTol: 1200, maxTol: 1500, label: "Magnesium", unit: "mg/l" },
             no3: { minOpt: 2, maxOpt: 15, minTol: 1, maxTol: 30, label: "Nitrat", unit: "mg/l" },
-            po4: { minOpt: 0.02, maxOpt: 0.1, minTol: 0.01, maxTol: 0.15, label: "Phosphat", unit: "mg/l" },
+            po4: { minOpt: 0.02, maxOpt: 0.11, minTol: 0.01, maxTol: 0.15, label: "Phosphat", unit: "mg/l" },
             temp: { minOpt: 24.5, maxOpt: 25.5, minTol: 23.0, maxTol: 27.5, label: "Temperatur", unit: "°C" },
             ph: { minOpt: 8.0, maxOpt: 8.4, minTol: 7.7, maxTol: 8.5, label: "pH-Wert", unit: "" }
         };
@@ -1261,8 +1261,9 @@
                 no3: 'langsam senken, etwa 30 % pro Schritt', po4: 'langsam senken, etwa 30 % pro Schritt, nie auf null'
             },
             // Empfehlung ab diesem Wert (Auslöser unten) und Zielwert, auf den dosiert wird
-            trigLow: { ca: 400, kh: 7.3, po4: 0.01, no3: 1 },
-            target: { ca: 425, po4: 0.05, no3: 5 },
+            trigLow: { ca: 405, kh: 7.3, po4: 0.01, no3: 1 },
+            trigHigh: { ca: 440, kh: 8.4, po4: 0.12, no3: 16 },
+            target: { ca: 425, kh: 7.8, po4: 0.05, no3: 5 },
             recheck: { sal: '12–24 Stunden', kh: '12–24 Stunden', ca: '24 Stunden', mg: '24 Stunden', no3: '3–7 Tagen', po4: '3–7 Tagen', temp: '24 Stunden', ph: '24 Stunden' },
             recheckMs: { sal: 1, kh: 1, ca: 1, mg: 1, no3: 3, po4: 3, temp: 1, ph: 1 },
             slots: { sal: ['up'], kh: ['up'], ca: ['up'], mg: ['up'], no3: ['down', 'up'], po4: ['down', 'up'] }
@@ -1436,7 +1437,10 @@
                 const cfg = thresholds[k];
                 const v = L[k];
                 const trig = REC.trigLow[k];
-                const dir = (v < cfg.minOpt || (trig !== undefined && v <= trig + 1e-9)) ? 'low' : (v > cfg.maxOpt ? 'high' : null);
+                const trigH = REC.trigHigh[k];
+                const isLow = trig !== undefined ? v <= trig + 1e-9 : v < cfg.minOpt;
+                const isHigh = trigH !== undefined ? v >= trigH - 1e-9 : v > cfg.maxOpt;
+                const dir = isLow ? 'low' : (isHigh ? 'high' : null);
                 if (!dir) return;
                 const border = false;
                 items.push({ k, v, dir, border, plan: border ? null : buildPlan(k, v, dir), meta: meta[k] });
