@@ -1448,10 +1448,35 @@
             return { L, items, inter: computeInteractions(L) };
         }
 
+        // Tagesdosis: Anpassung der eigenen Erhaltungsdosis um 15 % (üblicher Richtwert, danach nachmessen)
+        const DAILY_PCT = 0.15;
+        function dailyAdvice(it) {
+            const k = it.k, cfg = thresholds[k], V = appSettings.volume;
+            const out = [];
+            const jobs = [];
+            if (it.dir === 'low') jobs.push(['up', +1]);
+            else if (k === 'no3' || k === 'po4') { jobs.push(['down', +1]); jobs.push(['up', -1]); }
+            else jobs.push(['up', -1]);
+            let missing = false;
+            jobs.forEach(([slot, sign]) => {
+                const p = appSettings.products[k + '_' + slot];
+                if (!p || !p.name) return;
+                if (!(p.daily > 0)) { missing = true; return; }
+                const u = p.unit || 'ml';
+                const neu = p.daily * (1 + sign * DAILY_PCT);
+                const eff = (p.effect > 0 && V > 0) ? (p.daily * DAILY_PCT) * p.effect / ((p.amount > 0 ? p.amount : 1) * (V / (p.per > 0 ? p.per : 100))) : null;
+                const effTxt = eff ? ` Das ändert ${cfg.label} rechnerisch um etwa ${fmtNum(eff)} ${cfg.unit} pro Tag.` : '';
+                out.push(`${p.name}: Tagesdosis von ${fmtNum(Math.round(p.daily * 100) / 100)} ${u} auf ${fmtNum(Math.round(neu * 100) / 100)} ${u} ${sign > 0 ? 'erhöhen' : 'reduzieren'} (${sign > 0 ? '+' : '−'}${Math.round(DAILY_PCT * 100)} %).${effTxt}`);
+            });
+            if (!out.length && missing) out.push('Trage unter „Produkte & Dosierung“ deine aktuelle Tagesdosis ein, dann zeige ich dir hier die neue Tagesdosis.');
+            return out;
+        }
+
         function recParts(it, rd) {
             const cfg = thresholds[it.k];
             const need = it.dir === 'low' ? 'up' : 'down';
             return {
+                daily: dailyAdvice(it),
                 border: it.border ? `Liegt nur knapp außerhalb, im Bereich der Messungenauigkeit (etwa ±${fmtNum(REC.tol[it.k])} ${cfg.unit}). Erst nachmessen, bevor du etwas änderst.` : null,
                 target: it.plan ? `Ziel: ${fmtNum(it.plan.target)} ${cfg.unit}` : null,
                 limit: REC.limit[it.k] || null,
@@ -1475,6 +1500,7 @@
                 if (P.more) out.push('Danach weiter nach der Nachmessung.');
                 out.push(`Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt.`);
             }
+            P.daily.forEach(x => out.push('Tagesdosis: ' + x));
             if (P.needProduct) out.push('Für Mengenangaben dein Produkt und das Nettovolumen in der App unter „Produkte & Dosierung“ eintragen.');
             if (P.tip) out.push(P.tip);
             P.inter.forEach(x => out.push('Wechselwirkung: ' + x.text));
@@ -1500,6 +1526,7 @@
                     <div class="rec-sec"><b>Mögliche Ursachen</b><br>${kb.ursache}</div>
                     <div class="rec-sec"><b>Was du tun kannst</b><br>${kb.massn}</div>
                     ${steps ? `<div class="rec-sec"><b>Schrittplan</b> <span class="rec-meta">(${P.target}${P.limit ? ' · Grenze: ' + P.limit : ''})</span><ol class="rec-steps">${steps}</ol>${P.more ? '<div class="rec-meta">Danach weiter nach der Nachmessung.</div>' : ''}<div class="rec-meta">Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt. Beachte die Anwendungshinweise deines Herstellers.</div></div>` : ''}
+                    ${P.daily.length ? `<div class="rec-sec"><b>Tagesdosis anpassen</b>${P.daily.map(x => `<div>${escapeHtml(x)}</div>`).join('')}<div class="rec-meta">Zusätzlich zum Schrittplan oben. Nach 3–7 Tagen nachmessen und bei Bedarf erneut anpassen.</div></div>` : ''}
                     ${P.needProduct ? '<div class="rec-info">Für Mengenangaben trage dein Produkt und das Nettovolumen unter <span class="rec-link" onclick="openProducts()">Produkte &amp; Dosierung</span> ein.</div>' : ''}
                     ${P.tip ? `<div class="rec-info">${P.tip}</div>` : ''}
                     ${P.inter.map(x => `<div class="${x.level === 'warn' ? 'rec-warn' : 'rec-info'}">${x.text}</div>`).join('')}
@@ -1586,6 +1613,11 @@
                             <span>${cfg.unit} in</span>
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
                             <span>Litern</span>
+                        </div>
+                        <div class="prod-line">
+                            <span>Meine Tagesdosis:</span>
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onchange="setProduct('${slot}','daily',this.value)">
+                            <span>${escapeHtml(p.unit || 'ml')} pro Tag (für dein Nettovolumen)</span>
                         </div>
                     </div>`;
                 });
