@@ -932,7 +932,7 @@
         // Thresholds structure definitions
         const thresholds = {
             sal: { minOpt: 34, maxOpt: 36, minTol: 33, maxTol: 37, label: "Salinität", unit: "psu" },
-            kh: { minOpt: 7.0, maxOpt: 8.2, minTol: 6.5, maxTol: 8.5, label: "KH", unit: "°dKH" },
+            kh: { minOpt: 7.4, maxOpt: 8.2, minTol: 6.5, maxTol: 8.5, label: "KH", unit: "°dKH" },
             ca: { minOpt: 400, maxOpt: 440, minTol: 380, maxTol: 460, label: "Calcium", unit: "mg/l" },
             mg: { minOpt: 1300, maxOpt: 1400, minTol: 1200, maxTol: 1500, label: "Magnesium", unit: "mg/l" },
             no3: { minOpt: 2, maxOpt: 15, minTol: 1, maxTol: 30, label: "Nitrat", unit: "mg/l" },
@@ -1260,6 +1260,9 @@
                 mg: 'höchstens 100 mg/l pro Tag', temp: 'höchstens 1 °C pro Tag',
                 no3: 'langsam senken, etwa 30 % pro Schritt', po4: 'langsam senken, etwa 30 % pro Schritt, nie auf null'
             },
+            // Empfehlung ab diesem Wert (Auslöser unten) und Zielwert, auf den dosiert wird
+            trigLow: { ca: 400, kh: 7.3, po4: 0.01, no3: 1 },
+            target: { ca: 425, po4: 0.05, no3: 5 },
             recheck: { sal: '12–24 Stunden', kh: '12–24 Stunden', ca: '24 Stunden', mg: '24 Stunden', no3: '3–7 Tagen', po4: '3–7 Tagen', temp: '24 Stunden', ph: '24 Stunden' },
             recheckMs: { sal: 1, kh: 1, ca: 1, mg: 1, no3: 3, po4: 3, temp: 1, ph: 1 },
             slots: { sal: ['up'], kh: ['up'], ca: ['up'], mg: ['up'], no3: ['down', 'up'], po4: ['down', 'up'] }
@@ -1355,7 +1358,7 @@
             const cfg = thresholds[k];
             const st = REC.step[k];
             if (!st) return null;
-            const target = (cfg.minOpt + cfg.maxOpt) / 2;
+            const target = REC.target[k] !== undefined ? REC.target[k] : (cfg.minOpt + cfg.maxOpt) / 2;
             const steps = [];
             let cur = v;
             for (let i = 0; i < 4; i++) {
@@ -1432,10 +1435,10 @@
                 if (L[k] === undefined) return;
                 const cfg = thresholds[k];
                 const v = L[k];
-                const dir = v < cfg.minOpt ? 'low' : (v > cfg.maxOpt ? 'high' : null);
+                const trig = REC.trigLow[k];
+                const dir = (v < cfg.minOpt || (trig !== undefined && v <= trig + 1e-9)) ? 'low' : (v > cfg.maxOpt ? 'high' : null);
                 if (!dir) return;
-                const dist = dir === 'low' ? cfg.minOpt - v : v - cfg.maxOpt;
-                const border = dist <= REC.tol[k];
+                const border = false;
                 items.push({ k, v, dir, border, plan: border ? null : buildPlan(k, v, dir), meta: meta[k] });
             });
             return { L, items, inter: computeInteractions(L) };
@@ -1446,7 +1449,7 @@
             const need = it.dir === 'low' ? 'up' : 'down';
             return {
                 border: it.border ? `Liegt nur knapp außerhalb, im Bereich der Messungenauigkeit (etwa ±${fmtNum(REC.tol[it.k])} ${cfg.unit}). Erst nachmessen, bevor du etwas änderst.` : null,
-                target: it.plan ? `Ziel: Ø ${fmtNum(it.plan.target)} ${cfg.unit}` : null,
+                target: it.plan ? `Ziel: ${fmtNum(it.plan.target)} ${cfg.unit}` : null,
                 limit: REC.limit[it.k] || null,
                 steps: it.plan ? it.plan.steps.map((s, i) => stepText(it.k, i, s)) : [],
                 more: !!(it.plan && it.plan.more),
@@ -1484,7 +1487,7 @@
             const age = Math.floor((Date.now() - m.ts) / DAY_MS);
             const steps = P.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('');
             return `<details class="rec-item">
-                <summary><span style="color:${paramColors[it.k]}">${cfg.label}</span><span>${fmtNum(it.v)} ${cfg.unit}</span><span style="color:var(--text-muted); font-weight:500;">${it.dir === 'low' ? 'zu niedrig' : 'zu hoch'}</span><span class="status-badge ${st.badge}">${st.label}</span></summary>
+                <summary><span style="color:${paramColors[it.k]}">${cfg.label}</span><span>${fmtNum(it.v)} ${cfg.unit}</span><span style="color:var(--text-muted); font-weight:500;">${it.dir === 'low' ? (st.label === 'Optimal' ? 'am unteren Rand' : 'zu niedrig') : 'zu hoch'}</span><span class="status-badge ${st.badge}">${st.label}</span></summary>
                 <div class="rec-body">
                     <div class="rec-meta">Gemessen am ${m.date.split('-').reverse().join('.')}${m.time ? ', ' + m.time + ' Uhr' : ''} · Sollbereich ${fmtNum(cfg.minOpt)}–${fmtNum(cfg.maxOpt)} ${cfg.unit}</div>
                     ${age > 14 ? `<div class="rec-warn">Diese Messung ist ${age} Tage alt. Bitte erst nachmessen.</div>` : ''}
@@ -1736,11 +1739,11 @@
                 rd.items.forEach(it => {
                     const cfg = thresholds[it.k];
                     const stt = getStatusColorClass(it.k, it.v);
-                    const col = stt.label === 'Warnung' ? '0.72 0.5 0.02 rg' : '0.75 0.09 0.18 rg';
+                    const col = (stt.label === 'Warnung' || stt.label === 'Optimal') ? '0.72 0.5 0.02 rg' : '0.75 0.09 0.18 rg';
                     const ls = [];
                     recPlainLines(it, rd).forEach(t => wrap(t, 9, false, W - 2 * M - 12).forEach(l => ls.push(l)));
                     ensure(18 + Math.min(ls.length, 3) * 12);
-                    text(M, y - 10, `${cfg.label}: ${num(it.v)} ${cfg.unit} - ${it.dir === 'low' ? 'zu niedrig' : 'zu hoch'} (Soll ${num(cfg.minOpt)} - ${num(cfg.maxOpt)} ${cfg.unit})`, 9.5, 'F2', col);
+                    text(M, y - 10, `${cfg.label}: ${num(it.v)} ${cfg.unit} - ${it.dir === 'low' ? (stt.label === 'Optimal' ? 'am unteren Rand' : 'zu niedrig') : 'zu hoch'} (Soll ${num(cfg.minOpt)} - ${num(cfg.maxOpt)} ${cfg.unit})`, 9.5, 'F2', col);
                     y -= 15;
                     ls.forEach(l => { ensure(12); text(M + 8, y - 8, l, 9); y -= 12; });
                     y -= 4;
