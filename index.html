@@ -477,6 +477,41 @@
         #reminderSettings summary { list-style: none; }
         #reminderSettings summary::-webkit-details-marker { display: none; }
 
+        .rec-item { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+        .rec-item:last-of-type { border-bottom: none; }
+        .rec-item summary {
+            cursor: pointer;
+            padding: 12px 0;
+            font-weight: 700;
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 10px;
+        }
+        .rec-item summary::-webkit-details-marker { display: none; }
+        .rec-body { font-size: 0.85rem; line-height: 1.45; padding: 0 0 14px; }
+        .rec-sec { margin-top: 10px; }
+        .rec-meta { color: var(--text-muted); font-size: 0.78rem; }
+        .rec-warn, .rec-info {
+            margin-top: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+        }
+        .rec-warn { border-left: 3px solid #f6d365; background: rgba(246, 211, 101, 0.08); }
+        .rec-info { border-left: 3px solid rgba(79, 227, 238, 0.7); background: rgba(79, 227, 238, 0.07); }
+        .rec-steps { margin: 6px 0 4px 18px; }
+        .rec-steps li { margin-bottom: 6px; }
+        .rec-link { color: #4fe3ee; text-decoration: underline; cursor: pointer; }
+        .prod-block { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+        .prod-title { font-weight: 700; margin-bottom: 6px; }
+        .prod-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 8px; font-size: 0.85rem; }
+        .prod-line input { width: 82px; }
+        .prod-line select { width: 112px; }
+        #productSettings summary { list-style: none; }
+        #productSettings summary::-webkit-details-marker { display: none; }
+
         /* History Table Container */
         .table-responsive {
             overflow-x: auto;
@@ -701,6 +736,12 @@
                 </div>
             </div>
 
+            <div class="glass-panel" id="recPanel" style="display: none;">
+                <div class="panel-title">💡 Empfehlungen</div>
+                <div id="recList"></div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">Orientierung auf Basis gängiger Faustwerte der Riffaquaristik und deiner eigenen Produktangaben, keine Garantie. Beachte immer die Anwendungshinweise deiner Produkte.</div>
+            </div>
+
             <div class="glass-panel">
                 <div style="font-weight: 700; margin-bottom: 12px;">📈 Trend-Verlaufskurve</div>
                 <div class="chart-controls">
@@ -742,6 +783,12 @@
                     </table>
                 </div>
             </div>
+
+            <details class="glass-panel" id="productSettings">
+                <summary style="cursor: pointer; font-weight: 700;">🧪 Produkte &amp; Dosierung</summary>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Trage hier deine eigenen Produkte ein, so wie auf dem Etikett angegeben, z. B. „1 ml erhöht KH um 0,1 dKH in 100 Litern“. Alle Mengenangaben in den Empfehlungen werden daraus berechnet.</div>
+                <div id="productRows"></div>
+            </details>
 
             <details class="glass-panel" id="backupPanel">
                 <summary style="cursor: pointer; font-weight: 700;">💾 Datensicherung (Backup)</summary>
@@ -908,6 +955,7 @@
             renderGallery();
             initChart();
             renderReminderSettings();
+            renderProductSettings();
             renderBackupInfo();
             if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
             if (!Object.keys(reminders).length) document.getElementById('reminderSettings').open = true;
@@ -1171,6 +1219,13 @@
                 else if (d === 0) items.push({ d, html: `${label} – heute fällig` });
                 else if (d === 1) items.push({ d, html: `${label} – morgen fällig` });
             });
+            let fuChanged = false;
+            Object.keys(followups).forEach(k => {
+                const f = followups[k];
+                if (!thresholds[k] || !f || lastMeasured(k) > f.action) { delete followups[k]; fuChanged = true; return; }
+                if (Date.now() >= f.due) items.push({ d: -10000, html: `<b style="color:${paramColors[k]}">${thresholds[k].label}</b> – nachmessen (nach deiner Maßnahme)` });
+            });
+            if (fuChanged) saveFollowups();
             items.sort((a, b) => a.d - b.d);
             const active = Object.keys(reminders).filter(k => thresholds[k]).length;
             document.getElementById('remSummary').textContent = active ? `⏰ Messerinnerungen (${active} aktiv) – einstellen` : '⏰ Messerinnerungen einstellen';
@@ -1179,6 +1234,358 @@
         }
 
         // Kalenderdatei mit wiederkehrenden Terminen und Erinnerung
+        // ===== Empfehlungen & Dosierung (auf Basis deiner eigenen Produkte) =====
+        let appSettings = (() => { try { const s = JSON.parse(localStorage.getItem('pepeaqua_settings')); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; } })();
+        if (!appSettings.products) appSettings.products = {};
+        let followups = (() => { try { return JSON.parse(localStorage.getItem('pepeaqua_followups')) || {}; } catch (e) { return {}; } })();
+
+        function saveSettings() {
+            try { localStorage.setItem('pepeaqua_settings', JSON.stringify(appSettings)); } catch (e) {}
+            renderRecommendations();
+        }
+
+        function saveFollowups() {
+            try { localStorage.setItem('pepeaqua_followups', JSON.stringify(followups)); } catch (e) {}
+        }
+
+        const REC = {
+            order: ['temp', 'sal', 'mg', 'kh', 'ca', 'no3', 'po4', 'ph'],
+            tol: { sal: 0.5, kh: 0.3, ca: 15, mg: 50, no3: 2, po4: 0.02, temp: 0.3, ph: 0.1 },
+            step: {
+                sal: { up: 1, down: 1 }, kh: { up: 0.5, down: 0.5 }, ca: { up: 10, down: 10 }, mg: { up: 50, down: 50 },
+                no3: { up: 2, down: { rel: 0.3 } }, po4: { up: 0.02, down: { rel: 0.3 } }, temp: { up: 1, down: 1 }
+            },
+            limit: {
+                sal: 'höchstens 1 psu pro Tag', kh: 'höchstens 1 dKH pro Tag', ca: 'höchstens 20 mg/l pro Tag',
+                mg: 'höchstens 100 mg/l pro Tag', temp: 'höchstens 1 °C pro Tag',
+                no3: 'langsam senken, etwa 30 % pro Schritt', po4: 'langsam senken, etwa 30 % pro Schritt, nie auf null'
+            },
+            recheck: { sal: '12–24 Stunden', kh: '12–24 Stunden', ca: '24 Stunden', mg: '24 Stunden', no3: '3–7 Tagen', po4: '3–7 Tagen', temp: '24 Stunden', ph: '24 Stunden' },
+            recheckMs: { sal: 1, kh: 1, ca: 1, mg: 1, no3: 3, po4: 3, temp: 1, ph: 1 },
+            slots: { sal: ['up'], kh: ['up'], ca: ['up'], mg: ['up'], no3: ['down', 'up'], po4: ['down', 'up'] }
+        };
+
+        const KB = {
+            sal: {
+                low: { ein: 'Ein zu niedriger Salzgehalt belastet Korallen und Fische (osmotischer Stress).', ursache: 'Zu viel Osmosewasser beim Nachfüllen, Defekt am Nachfüllautomaten oder ein nicht kalibriertes Refraktometer.', massn: 'Salzgehalt langsam anheben, z. B. mit deinem Salz-Produkt vorgelöst oder über einen Wasserwechsel mit etwas stärker konzentriertem Salzwasser. Nachfüllautomat und Messgerät prüfen.' },
+                high: { ein: 'Ein zu hoher Salzgehalt entsteht meist durch Verdunstung und stresst die Tiere.', ursache: 'Zu wenig Osmosewasser nachgefüllt, starke Verdunstung (Abdeckung offen, trockene Raumluft) oder ungenaues Messgerät.', massn: 'Statt Salzwasser Osmosewasser nachfüllen und einen Teil des Wassers gegen Osmosewasser tauschen. Das Refraktometer mit 35-psu-Kalibrierlösung prüfen.' }
+            },
+            kh: {
+                low: { ein: 'Die Karbonathärte ist der wichtigste Baustoff für das Korallenskelett und puffert den pH-Wert. Zu niedrig bremst sie das Wachstum und lässt den pH stärker schwanken.', ursache: 'Hoher Verbrauch durch wachsende Korallen, zu geringe Erhaltungsdosierung, Neuwasser mit niedriger KH oder zu wenig Magnesium.', massn: 'Mit deinem KH-Produkt in kleinen Schritten anheben und nach jedem Schritt nachmessen. Dauerhaft die tägliche Dosis an den Verbrauch anpassen.' },
+                high: { ein: 'Eine zu hohe KH kann Korallen schädigen (z. B. Gewebeschäden an den Spitzen) und fördert Ausfällungen.', ursache: 'Überdosierung, Neuwasser mit hoher KH oder zu geringer Verbrauch.', massn: 'KH-Dosierung pausieren oder deutlich reduzieren und den Wert nur langsam sinken lassen, nicht durch große Wasserwechsel.' }
+            },
+            ca: {
+                low: { ein: 'Calcium ist neben der KH der zweite Baustoff des Korallenskeletts. Zu wenig bremst das Wachstum.', ursache: 'Verbrauch durch Korallen und Kalkalgen, zu geringe Erhaltungsdosierung oder zu wenig Magnesium.', massn: 'Mit deinem Calcium-Produkt in kleinen Schritten anheben, nach jedem Schritt nachmessen. Nicht zeitgleich an derselben Stelle mit dem KH-Produkt zugeben.' },
+                high: { ein: 'Zu viel Calcium begünstigt Ausfällungen (weißer Kalkstaub an Pumpen und Heizern), vor allem zusammen mit hoher KH.', ursache: 'Überdosierung oder Neuwasser mit hohem Calciumgehalt.', massn: 'Calcium-Dosierung pausieren und den Wert langsam sinken lassen, notfalls mit Teilwasserwechseln.' }
+            },
+            mg: {
+                low: { ein: 'Magnesium stabilisiert Calcium und KH und verhindert, dass beide ungewollt ausfallen.', ursache: 'Verbrauch durch Kalkalgen und Korallen, Dosierung von Calcium und KH ohne Magnesium oder ein Salz mit wenig Magnesium.', massn: 'Mit deinem Magnesium-Produkt langsam über mehrere Tage anheben, am besten bevor Calcium und KH angehoben werden.' },
+                high: { ein: 'Zu viel Magnesium ist selten kritisch, kann aber die Kalkbildung stören.', ursache: 'Überdosierung oder Neuwasser mit hohem Magnesiumgehalt.', massn: 'Magnesium-Dosierung pausieren und den Wert über Wasserwechsel langsam senken.' }
+            },
+            no3: {
+                low: { ein: 'Sehr wenig Nitrat lässt Korallen hungern (blasse Farben, Gewebeverlust) und begünstigt Cyanobakterien und Dinoflagellaten.', ursache: 'Zu starker Nährstoffexport (Abschäumer, Kohlenstoff, Adsorber), wenig Besatz oder zu wenig Futter.', massn: 'Nährstoffexport reduzieren und mehr füttern. Bei Bedarf dein Nitrat-Produkt in kleinen Schritten, Phosphat dabei im Blick behalten.' },
+                high: { ein: 'Hohes Nitrat fördert Algen und stresst empfindliche Korallen.', ursache: 'Überfütterung, zu wenig Nährstoffexport, Mulm im Filter oder zu viel Besatz.', massn: 'Weniger füttern, Wasserwechsel, Abschäumer und Filter pflegen, ggf. dein Nitrat-Produkt nach Herstellerangabe. Nur langsam senken, schnelle Sprünge stressen Korallen.' }
+            },
+            po4: {
+                low: { ein: 'Zu wenig Phosphat lässt Korallen hungern (Ausbleichen, Gewebeverlust) und begünstigt Cyanobakterien und Dinoflagellaten.', ursache: 'Zu starker Export (Adsorber, Kohlenstoff), wenig Futter oder wenig Besatz.', massn: 'Export reduzieren und mehr füttern. Bei Bedarf dein Phosphat-Produkt in sehr kleinen Schritten.' },
+                high: { ein: 'Hohes Phosphat fördert Algen und hemmt die Kalkbildung der Korallen.', ursache: 'Überfütterung, Futter mit viel Phosphat, zu wenig Export oder Leitungswasser statt Osmosewasser.', massn: 'Futter reduzieren, Wasserwechsel, Abschäumer und Filter pflegen, ggf. dein Phosphat-Senker oder ein Adsorber nach Herstellerangabe. Langsam senken und nie auf null drücken.' }
+            },
+            temp: {
+                low: { ein: 'Zu kalt verlangsamt den Stoffwechsel und macht Tiere anfälliger für Krankheiten.', ursache: 'Heizer oder Thermostat defekt oder zu schwach, niedrige Raumtemperatur.', massn: 'Heizer und Thermostat prüfen und die Temperatur langsam anheben. Ein zweiter, unabhängiger Regler ist eine gute Absicherung.' },
+                high: { ein: 'Zu warm erhöht das Bleichrisiko, senkt den Sauerstoffgehalt und steigert den Verbrauch an Calcium und KH.', ursache: 'Abwärme von Beleuchtung und Pumpen, heiße Sommertage, Heizer klemmt.', massn: 'Lüfter oder Kühler einsetzen, Beleuchtung dimmen oder verkürzen, Abdeckung öffnen, Raum kühlen. Die Temperatur langsam senken.' }
+            },
+            ph: {
+                low: { ein: 'Ein niedriger pH-Wert bremst die Verkalkung der Korallen.', ursache: 'CO₂-reiche Raumluft, Abschäumer saugt Raumluft an, niedrige KH oder eine ungenaue pH-Sonde.', massn: 'Raum lüften, Abschäumer mit Frischluft von draußen betreiben, KH prüfen. Die pH-Sonde mit einem Tropfentest gegenprüfen. Kein „pH-Plus“ verwenden.' },
+                high: { ein: 'Ein hoher pH-Wert kommt meist von Kalkwasser oder sehr hoher KH oder ist der Tageshöchstwert.', ursache: 'Zu schnelle Kalkwasser- oder KH-Dosierung, Messung zur Tageszeit mit natürlichem Höchstwert.', massn: 'Dosierung drosseln und immer zur gleichen Tageszeit messen, da der pH im Tagesverlauf schwankt.' }
+            }
+        };
+
+        function fmtNum(v) { return Number(Number(v).toFixed(3)).toLocaleString('de-DE'); }
+        function fmtDose(x) { return x >= 10 ? String(Math.round(x)) : (x >= 1 ? fmtNum(Math.round(x * 10) / 10) : fmtNum(Math.round(x * 100) / 100)); }
+
+        function latestValue(k) {
+            let best = null;
+            records.forEach(r => {
+                if (r.values && r.values[k] !== null && r.values[k] !== undefined && r.values[k] !== '') {
+                    const ts = recTs(r);
+                    const v = parseFloat(r.values[k]);
+                    if (!isNaN(v) && !isNaN(ts) && (!best || ts > best.ts)) best = { v, ts, date: r.date, time: r.time };
+                }
+            });
+            return best;
+        }
+
+        function trendOf(k, days = 14) {
+            const now = Date.now();
+            const pts = [];
+            records.forEach(r => {
+                if (r.values && r.values[k] !== null && r.values[k] !== undefined && r.values[k] !== '') {
+                    const ts = recTs(r);
+                    const y = parseFloat(r.values[k]);
+                    if (!isNaN(ts) && !isNaN(y) && ts >= now - days * DAY_MS && ts <= now + DAY_MS) pts.push({ x: ts / DAY_MS, y });
+                }
+            });
+            if (pts.length < 3) return null;
+            const xs = pts.map(p => p.x);
+            const span = Math.max(...xs) - Math.min(...xs);
+            if (span < 2) return null;
+            const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+            const my = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+            let num = 0, den = 0;
+            pts.forEach(p => { num += (p.x - mx) * (p.y - my); den += (p.x - mx) * (p.x - mx); });
+            if (!den) return null;
+            return { slope: num / den, n: pts.length, span: Math.round(span) };
+        }
+
+        function productReady(k, dir) {
+            const p = appSettings.products[k + '_' + dir];
+            return !!(p && p.name && p.effect > 0 && appSettings.volume > 0);
+        }
+
+        function doseFor(k, delta) {
+            const p = appSettings.products[k + '_' + (delta > 0 ? 'up' : 'down')];
+            const V = appSettings.volume;
+            if (!p || !p.name || !(p.effect > 0) || !(V > 0)) return null;
+            const amount = p.amount > 0 ? p.amount : 1;
+            const per = p.per > 0 ? p.per : 100;
+            return { amount: Math.abs(delta) / p.effect * (V / per) * amount, unit: p.unit || 'ml', name: p.name };
+        }
+
+        function buildPlan(k, v, dir) {
+            const cfg = thresholds[k];
+            const st = REC.step[k];
+            if (!st) return null;
+            const target = (cfg.minOpt + cfg.maxOpt) / 2;
+            const steps = [];
+            let cur = v;
+            for (let i = 0; i < 4; i++) {
+                const gap = target - cur;
+                if (dir === 'low' ? gap <= 1e-9 : gap >= -1e-9) break;
+                const size = dir === 'low' ? st.up : st.down;
+                const abs = typeof size === 'object' ? cur * size.rel : size;
+                const delta = dir === 'low' ? Math.min(gap, abs) : -Math.min(-gap, abs);
+                steps.push({ from: cur, to: cur + delta, delta });
+                cur += delta;
+            }
+            const more = dir === 'low' ? cur < target - 1e-9 : cur > target + 1e-9;
+            return { target, steps, more };
+        }
+
+        function stepText(k, i, s) {
+            const cfg = thresholds[k];
+            const V = appSettings.volume;
+            let t = `Schritt ${i + 1}: ${fmtNum(s.from)} → ${fmtNum(s.to)} ${cfg.unit} (${s.delta > 0 ? '+' : '−'}${fmtNum(Math.abs(s.delta))})`;
+            const d = doseFor(k, s.delta);
+            if (d) t += ` – ca. ${fmtDose(d.amount)} ${d.unit} ${d.name}`;
+            if (V > 0 && s.delta < 0 && k === 'sal') {
+                t += ` – oder ca. ${fmtDose(V * (1 - s.to / s.from))} Liter Salzwasser gegen Osmosewasser tauschen`;
+            }
+            if (V > 0 && s.delta < 0 && (k === 'no3' || k === 'po4')) {
+                const frac = 1 - s.to / s.from;
+                if (frac <= 0.3) t += ` – oder Wasserwechsel ca. ${fmtDose(V * frac)} Liter (${Math.round(frac * 100)} %) mit ${k === 'no3' ? 'nitratfreiem' : 'phosphatfreiem'} Neuwasser`;
+            }
+            return t;
+        }
+
+        function actionLine(k, s) {
+            const cfg = thresholds[k];
+            const d = doseFor(k, s.delta);
+            return `${cfg.label} ${s.delta > 0 ? '+' : '−'}${fmtNum(Math.abs(s.delta))} ${cfg.unit}${d ? ' – ' + fmtDose(d.amount) + ' ' + d.unit + ' ' + d.name : ''}`;
+        }
+
+        function trendText(k) {
+            const tr = trendOf(k);
+            if (!tr) return null;
+            const cfg = thresholds[k];
+            if (Math.abs(tr.slope * tr.span) <= REC.tol[k]) return null;
+            let t = `Trend (letzte ${tr.span} Tage, ${tr.n} Messungen): ${tr.slope > 0 ? '+' : '−'}${fmtNum(Math.abs(tr.slope))} ${cfg.unit} pro Tag.`;
+            if (tr.slope < 0 && (k === 'kh' || k === 'ca' || k === 'mg')) {
+                const d = doseFor(k, -tr.slope);
+                if (d) t += ` Zum Stabilhalten zusätzlich ca. ${fmtDose(d.amount)} ${d.unit} ${d.name} pro Tag (verteilt).`;
+            }
+            return t;
+        }
+
+        function computeInteractions(L) {
+            const T = thresholds, out = [];
+            const lo = k => L[k] !== undefined && L[k] < T[k].minOpt;
+            const hi = k => L[k] !== undefined && L[k] > T[k].maxOpt;
+            if (lo('mg')) out.push({ p: ['mg', 'ca', 'kh'], level: (lo('ca') || lo('kh')) ? 'warn' : 'info', text: 'Magnesium ist zu niedrig. Zuerst Magnesium anheben: Ist es zu niedrig, lassen sich Calcium und KH schlecht halten und fallen leichter aus.' });
+            if (hi('ca') && hi('kh')) out.push({ p: ['ca', 'kh'], level: 'warn', text: 'Calcium und KH sind beide zu hoch. Es droht Ausfällung (weißer Kalkstaub an Pumpen und Heizern). Beide Dosierungen pausieren.' });
+            if (hi('po4')) out.push({ p: ['po4', 'kh', 'ca'], level: 'info', text: 'Zu hohes Phosphat hemmt die Kalkbildung der Korallen. Das Wachstum lässt nach, Calcium und KH werden scheinbar weniger verbraucht.' });
+            if (lo('no3') && lo('po4')) out.push({ p: ['no3', 'po4'], level: 'warn', text: 'Nitrat und Phosphat sind beide zu niedrig. Korallen hungern, Cyanobakterien und Dinoflagellaten kommen auf. Nicht weiter Nährstoffe exportieren, sondern füttern.' });
+            if (hi('no3') && lo('po4')) out.push({ p: ['no3', 'po4'], level: 'warn', text: 'Hohes Nitrat bei sehr niedrigem Phosphat macht Korallen empfindlicher für Bleiche (u. a. Wiedenmann et al. 2013). Phosphat nicht weiter senken, Nitrat langsam senken.' });
+            if (lo('ph') && lo('kh')) out.push({ p: ['ph', 'kh'], level: 'info', text: 'pH und KH sind beide zu niedrig. Zuerst die KH anheben, der pH stabilisiert sich dann oft mit.' });
+            if (lo('ph') && L.kh !== undefined && !lo('kh')) out.push({ p: ['ph'], level: 'info', text: 'Die KH passt, der pH ist aber niedrig. Das liegt eher an CO₂-reicher Raumluft: lüften und den Abschäumer mit Frischluft von draußen betreiben.' });
+            if (hi('temp')) out.push({ p: ['temp', 'kh', 'ca'], level: 'info', text: 'Eine höhere Temperatur steigert den Verbrauch an Calcium und KH und senkt den Sauerstoffgehalt.' });
+            const others = ['kh', 'ca', 'mg', 'no3', 'po4'];
+            if (hi('sal') && others.filter(hi).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Die Salinität und mehrere weitere Werte sind zu hoch. Das ist typisch bei Verdunstung (alles wird aufkonzentriert). Zuerst die Salinität korrigieren und dann neu messen, bevor andere Werte „korrigiert“ werden.' });
+            if (lo('sal') && others.filter(lo).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Die Salinität und mehrere weitere Werte sind zu niedrig. Das spricht für Verdünnung. Zuerst die Salinität korrigieren und dann neu messen.' });
+            return out;
+        }
+
+        function buildRecs() {
+            const L = {}, meta = {};
+            Object.keys(thresholds).forEach(k => { const lv = latestValue(k); if (lv) { L[k] = lv.v; meta[k] = lv; } });
+            const items = [];
+            REC.order.forEach(k => {
+                if (L[k] === undefined) return;
+                const cfg = thresholds[k];
+                const v = L[k];
+                const dir = v < cfg.minOpt ? 'low' : (v > cfg.maxOpt ? 'high' : null);
+                if (!dir) return;
+                const dist = dir === 'low' ? cfg.minOpt - v : v - cfg.maxOpt;
+                const border = dist <= REC.tol[k];
+                items.push({ k, v, dir, border, plan: border ? null : buildPlan(k, v, dir), meta: meta[k] });
+            });
+            return { L, items, inter: computeInteractions(L) };
+        }
+
+        function recParts(it, rd) {
+            const cfg = thresholds[it.k];
+            const need = it.dir === 'low' ? 'up' : 'down';
+            return {
+                border: it.border ? `Liegt nur knapp außerhalb, im Bereich der Messungenauigkeit (etwa ±${fmtNum(REC.tol[it.k])} ${cfg.unit}). Erst nachmessen, bevor du etwas änderst.` : null,
+                target: it.plan ? `Ziel: Ø ${fmtNum(it.plan.target)} ${cfg.unit}` : null,
+                limit: REC.limit[it.k] || null,
+                steps: it.plan ? it.plan.steps.map((s, i) => stepText(it.k, i, s)) : [],
+                more: !!(it.plan && it.plan.more),
+                recheck: REC.recheck[it.k],
+                inter: rd.inter.filter(x => x.p.includes(it.k)),
+                tip: (it.plan && (it.k === 'ca' || it.k === 'kh')) ? 'Beim Wachstum verbrauchen sich Calcium und KH im Verhältnis von etwa 7,15 mg/l Calcium zu 1 dKH. Beide Produkte mit etwas Abstand zugeben.' : null,
+                trend: trendText(it.k),
+                needProduct: !!(it.plan && (REC.slots[it.k] || []).includes(need) && !productReady(it.k, need))
+            };
+        }
+
+        function recPlainLines(it, rd) {
+            const P = recParts(it, rd);
+            const out = [];
+            if (P.border) out.push(P.border);
+            if (P.steps.length) {
+                out.push(`${P.target}${P.limit ? ' · Grenze: ' + P.limit : ''}`);
+                P.steps.forEach(s => out.push(s));
+                if (P.more) out.push('Danach weiter nach der Nachmessung.');
+                out.push(`Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt.`);
+            }
+            if (P.needProduct) out.push('Für Mengenangaben dein Produkt und das Nettovolumen in der App unter „Produkte & Dosierung“ eintragen.');
+            if (P.tip) out.push(P.tip);
+            P.inter.forEach(x => out.push('Wechselwirkung: ' + x.text));
+            if (P.trend) out.push(P.trend);
+            return out;
+        }
+
+        function recItemHtml(it, rd) {
+            const cfg = thresholds[it.k];
+            const kb = KB[it.k][it.dir];
+            const P = recParts(it, rd);
+            const st = getStatusColorClass(it.k, it.v);
+            const m = it.meta;
+            const age = Math.floor((Date.now() - m.ts) / DAY_MS);
+            const steps = P.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('');
+            return `<details class="rec-item">
+                <summary><span style="color:${paramColors[it.k]}">${cfg.label}</span><span>${fmtNum(it.v)} ${cfg.unit}</span><span style="color:var(--text-muted); font-weight:500;">${it.dir === 'low' ? 'zu niedrig' : 'zu hoch'}</span><span class="status-badge ${st.badge}">${st.label}</span></summary>
+                <div class="rec-body">
+                    <div class="rec-meta">Gemessen am ${m.date.split('-').reverse().join('.')}${m.time ? ', ' + m.time + ' Uhr' : ''} · Sollbereich ${fmtNum(cfg.minOpt)}–${fmtNum(cfg.maxOpt)} ${cfg.unit}</div>
+                    ${age > 14 ? `<div class="rec-warn">Diese Messung ist ${age} Tage alt. Bitte erst nachmessen.</div>` : ''}
+                    ${P.border ? `<div class="rec-warn">${P.border}</div>` : ''}
+                    <div class="rec-sec"><b>Einordnung</b><br>${kb.ein}</div>
+                    <div class="rec-sec"><b>Mögliche Ursachen</b><br>${kb.ursache}</div>
+                    <div class="rec-sec"><b>Was du tun kannst</b><br>${kb.massn}</div>
+                    ${steps ? `<div class="rec-sec"><b>Schrittplan</b> <span class="rec-meta">(${P.target}${P.limit ? ' · Grenze: ' + P.limit : ''})</span><ol class="rec-steps">${steps}</ol>${P.more ? '<div class="rec-meta">Danach weiter nach der Nachmessung.</div>' : ''}<div class="rec-meta">Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt. Beachte die Anwendungshinweise deines Herstellers.</div></div>` : ''}
+                    ${P.needProduct ? '<div class="rec-info">Für Mengenangaben trage dein Produkt und das Nettovolumen unter <span class="rec-link" onclick="openProducts()">Produkte &amp; Dosierung</span> ein.</div>' : ''}
+                    ${P.tip ? `<div class="rec-info">${P.tip}</div>` : ''}
+                    ${P.inter.map(x => `<div class="${x.level === 'warn' ? 'rec-warn' : 'rec-info'}">${x.text}</div>`).join('')}
+                    ${P.trend ? `<div class="rec-info">${P.trend}</div>` : ''}
+                    ${steps ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Schritt 1 als Maßnahme eintragen</button>` : ''}
+                </div>
+            </details>`;
+        }
+
+        function renderRecommendations() {
+            const panel = document.getElementById('recPanel');
+            if (!panel) return;
+            if (!records.some(r => r.values && Object.keys(r.values).some(k => r.values[k]))) { panel.style.display = 'none'; return; }
+            const rd = buildRecs();
+            panel.style.display = 'block';
+            const warns = rd.inter.filter(x => x.level === 'warn').map(x => `<div class="rec-warn">⚠️ ${x.text}</div>`).join('');
+            const body = rd.items.length ? rd.items.map(it => recItemHtml(it, rd)).join('') : '<div class="rec-meta" style="font-size:0.9rem;">✅ Alle zuletzt gemessenen Werte liegen im Sollbereich.</div>';
+            document.getElementById('recList').innerHTML = warns + body;
+        }
+
+        function logAction(k) {
+            const rd = buildRecs();
+            const it = rd.items.find(x => x.k === k);
+            if (!it || !it.plan || !it.plan.steps.length) return;
+            const line = actionLine(k, it.plan.steps[0]);
+            if (!confirm('Maßnahme eintragen?\n\n' + line)) return;
+            const d = new Date();
+            const vals = {};
+            Object.keys(thresholds).forEach(p => { vals[p] = null; });
+            records.push({
+                id: Date.now(),
+                date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+                time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+                type: 'Maßnahme', procedure: '', icpUrl: '', note: 'Maßnahme: ' + line, values: vals
+            });
+            records.sort((a, b) => recTs(a) - recTs(b));
+            try { localStorage.setItem('pepeaqua_records', JSON.stringify(records)); } catch (e) {}
+            followups[k] = { action: Date.now(), due: Date.now() + REC.recheckMs[k] * DAY_MS };
+            saveFollowups();
+            renderDashboard();
+            renderHistoryTable();
+            updateChart();
+        }
+
+        function openProducts() {
+            const d = document.getElementById('productSettings');
+            d.open = true;
+            d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function setVolume(v) {
+            const n = parseFloat(String(v).replace(',', '.'));
+            if (n > 0) appSettings.volume = n; else delete appSettings.volume;
+            saveSettings();
+        }
+
+        function setProduct(slot, field, v) {
+            const p = appSettings.products[slot] || (appSettings.products[slot] = {});
+            if (field === 'name' || field === 'unit') p[field] = String(v).trim();
+            else {
+                const n = parseFloat(String(v).replace(',', '.'));
+                if (n > 0) p[field] = n; else delete p[field];
+            }
+            saveSettings();
+        }
+
+        function renderProductSettings() {
+            let html = `<div class="rem-row"><label>Nettovolumen</label><input type="number" min="1" inputmode="decimal" class="input-styled" style="width:110px;" placeholder="z. B. 400" value="${appSettings.volume || ''}" onchange="setVolume(this.value)"><span>Liter</span></div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Wassermenge im System ohne Gestein und Sand (Becken plus Technikbecken).</div>`;
+            Object.keys(REC.slots).forEach(k => {
+                REC.slots[k].forEach(dir => {
+                    const slot = k + '_' + dir;
+                    const p = appSettings.products[slot] || {};
+                    const cfg = thresholds[k];
+                    const units = ['ml', 'g', 'Tropfen', 'Tabletten'];
+                    html += `<div class="prod-block">
+                        <div class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ${dir === 'up' ? '⬆️ erhöhen' : '⬇️ senken'}</div>
+                        <input type="text" class="input-styled" placeholder="Produktname" value="${escapeHtml(p.name || '')}" onchange="setProduct('${slot}','name',this.value)">
+                        <div class="prod-line">
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="1" value="${p.amount || ''}" onchange="setProduct('${slot}','amount',this.value)">
+                            <select class="input-styled" onchange="setProduct('${slot}','unit',this.value)">${units.map(u => `<option${(p.unit || 'ml') === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
+                            <span>${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um</span>
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${cfg.unit === 'psu' ? '1' : '0,1'}" value="${p.effect || ''}" onchange="setProduct('${slot}','effect',this.value)">
+                            <span>${cfg.unit} in</span>
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
+                            <span>Litern</span>
+                        </div>
+                    </div>`;
+                });
+            });
+            document.getElementById('productRows').innerHTML = html;
+        }
+
         // ===== PDF-Report (ohne Bibliothek, funktioniert auch als Home-Bildschirm-App) =====
         function createReport() {
             try {
@@ -1219,9 +1626,9 @@
                 mctx.font = `${bold ? 'bold ' : ''}${size}px Arial, Helvetica, sans-serif`;
                 return mctx.measureText(t).width;
             };
-            const WIN = { '–': 0x96, '—': 0x97, '…': 0x85, '•': 0x95, '“': 0x93, '”': 0x94, '‘': 0x91, '’': 0x92, '€': 0x80 };
+            const WIN = { '–': 0x96, '—': 0x97, '…': 0x85, '•': 0x95, '„': 0x84, '“': 0x93, '”': 0x94, '‘': 0x91, '’': 0x92, '€': 0x80 };
             const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
-            const clean = t => String(t).replace(EMOJI, '').replace(/\s+/g, ' ').trim();
+            const clean = t => String(t).replace(EMOJI, '').replace(/→/g, '->').replace(/−/g, '-').replace(/[≈≙]/g, '~').replace(/\s+/g, ' ').trim();
             const enc = t => {
                 let o = '';
                 for (const ch of clean(t)) {
@@ -1314,6 +1721,34 @@
                 hline(y - 14);
                 y -= 17;
             });
+
+            // Empfehlungen
+            const rd = buildRecs();
+            const warns = rd.inter.filter(x => x.level === 'warn');
+            if (rd.items.length || warns.length) {
+                heading('Empfehlungen (Orientierung)');
+                warns.forEach(x => {
+                    const ls = wrap('Achtung: ' + x.text, 9, false, W - 2 * M - 8);
+                    ensure(ls.length * 12 + 4);
+                    ls.forEach(l => { text(M + 8, y - 9, l, 9, 'F3', '0.72 0.5 0.02 rg'); y -= 12; });
+                    y -= 3;
+                });
+                rd.items.forEach(it => {
+                    const cfg = thresholds[it.k];
+                    const stt = getStatusColorClass(it.k, it.v);
+                    const col = stt.label === 'Warnung' ? '0.72 0.5 0.02 rg' : '0.75 0.09 0.18 rg';
+                    const ls = [];
+                    recPlainLines(it, rd).forEach(t => wrap(t, 9, false, W - 2 * M - 12).forEach(l => ls.push(l)));
+                    ensure(18 + Math.min(ls.length, 3) * 12);
+                    text(M, y - 10, `${cfg.label}: ${num(it.v)} ${cfg.unit} - ${it.dir === 'low' ? 'zu niedrig' : 'zu hoch'} (Soll ${num(cfg.minOpt)} - ${num(cfg.maxOpt)} ${cfg.unit})`, 9.5, 'F2', col);
+                    y -= 15;
+                    ls.forEach(l => { ensure(12); text(M + 8, y - 8, l, 9); y -= 12; });
+                    y -= 4;
+                });
+                ensure(24);
+                text(M, y - 8, 'Orientierung auf Basis gängiger Faustwerte und deiner eigenen Produktangaben, keine Garantie. Herstellerangaben beachten.', 8, 'F3', '0.45 0.5 0.55 rg');
+                y -= 16;
+            }
 
             // Verlaufskurve (so wie in der App eingestellt)
             const cv = document.getElementById('trendChart');
@@ -1413,7 +1848,7 @@
         }
 
         // ===== Datensicherung =====
-        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs'];
+        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups'];
 
         function buildBackup() {
             const data = {};
@@ -1524,6 +1959,7 @@
             renderDiary();
             renderReminders();
             renderBackupInfo();
+            renderRecommendations();
             const tbody = document.getElementById('historyTableBody');
             tbody.innerHTML = '';
             
@@ -1545,7 +1981,7 @@
                 valuesSummary += '</div>';
                 const noteBlock = `<div class="note-area" id="note-${r.id}">${noteView(r)}</div>`;
 
-                let typeDisplay = r.type === 'Heimtest' ? `🏠 <span style="font-size:0.75rem;color:var(--text-muted);">${r.procedure}</span>` : `🧪 <span style="font-size:0.75rem;color:var(--color-sal); font-weight:bold;">${r.procedure}</span>`;
+                let typeDisplay = r.type === 'Maßnahme' ? '🔧 <span style="font-size:0.75rem;color:var(--text-muted);">Maßnahme</span>' : r.type === 'Heimtest' ? `🏠 <span style="font-size:0.75rem;color:var(--text-muted);">${r.procedure}</span>` : `🧪 <span style="font-size:0.75rem;color:var(--color-sal); font-weight:bold;">${r.procedure}</span>`;
                 if(r.icpUrl) {
                     typeDisplay += `<br><a href="${r.icpUrl}" target="_blank" style="color:var(--color-sal); font-size:0.7rem; text-decoration:underline;">🔗 Analyse</a>`;
                 }
