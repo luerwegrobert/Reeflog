@@ -1337,7 +1337,7 @@
                 y -= 4;
                 drawImage(addImage(jb, tmp.width, tmp.height), M, y - ch, cw, ch);
                 y -= ch + 6;
-                text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Gemeinsame Skala nach Sollbereich (0 % = Soll min, 100 % = Soll max). Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
+                text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Gemeinsame Skala nach Sollbereich (0 % = Soll min, 100 % = Soll max, Ø = Durchschnitt des Sollbereichs). Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
                 y -= 14;
             }
 
@@ -1845,7 +1845,7 @@
                 if (c.single) return Number(v.toFixed(3)).toLocaleString('de-DE');
                 if (v === 0) return 'Soll min';
                 if (v === 100) return 'Soll max';
-                if (v === 50) return 'Mitte';
+                if (v === 50) return 'Ø';
                 return v + ' %';
             };
             ctx.font = `10px ${font}`;
@@ -2115,7 +2115,7 @@
                 myChart.yStep = 50;
                 myChart.yTitle = '';
                 myChart.bands = [{ from: 0, to: 100, color: 'rgba(0, 255, 135, 0.16)' }];
-                hint = 'Gemeinsame Skala nach Sollbereich: Die grüne Zone ist für jeden Parameter sein Sollbereich (0 % = Soll min, 100 % = Soll max). Tippe auf einen Punkt für den echten Messwert.';
+                hint = 'Gemeinsame Skala nach Sollbereich: Die grüne Zone ist für jeden Parameter sein Sollbereich (0 % = Soll min, 100 % = Soll max, Ø = Durchschnitt des Sollbereichs). Tippe auf einen Punkt für den echten Messwert.';
             }
 
             myChart.notes = records
