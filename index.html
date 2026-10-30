@@ -680,7 +680,7 @@
         <!-- DASHBOARD TAB -->
         <div id="dashboard" class="tab-content active">
             <div class="action-row">
-                <button class="btn-submit" style="margin-top:0;" onclick="window.print()">🖨️ PDF Report generieren</button>
+                <button class="btn-submit" style="margin-top:0;" onclick="createReport()">📄 PDF Report erstellen</button>
             </div>
 
             <div class="glass-panel" id="dueBanner" style="display: none;">
@@ -1179,6 +1179,239 @@
         }
 
         // Kalenderdatei mit wiederkehrenden Terminen und Erinnerung
+        // ===== PDF-Report (ohne Bibliothek, funktioniert auch als Home-Bildschirm-App) =====
+        function createReport() {
+            try {
+                const blob = buildReportPdf();
+                const d = new Date();
+                deliverPdf(blob, `reeflog-report-${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}.pdf`);
+            } catch (e) {
+                console.error(e);
+                alert('Der Report konnte nicht erstellt werden. Es wird die Druckansicht geöffnet.');
+                window.print();
+            }
+        }
+
+        async function deliverPdf(blob, name) {
+            const file = new File([blob], name, { type: 'application/pdf' });
+            try {
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], title: 'Reeflog Report' });
+                    return;
+                }
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+            }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+        }
+
+        function buildReportPdf() {
+            const W = 595.28, H = 841.89, M = 40;
+            const mctx = document.createElement('canvas').getContext('2d');
+            const wid = (t, size, bold) => {
+                mctx.font = `${bold ? 'bold ' : ''}${size}px Arial, Helvetica, sans-serif`;
+                return mctx.measureText(t).width;
+            };
+            const WIN = { '–': 0x96, '—': 0x97, '…': 0x85, '•': 0x95, '“': 0x93, '”': 0x94, '‘': 0x91, '’': 0x92, '€': 0x80 };
+            const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
+            const clean = t => String(t).replace(EMOJI, '').replace(/\s+/g, ' ').trim();
+            const enc = t => {
+                let o = '';
+                for (const ch of clean(t)) {
+                    const c = ch.codePointAt(0);
+                    if (c < 128) o += ch;
+                    else if (WIN[ch]) o += String.fromCharCode(WIN[ch]);
+                    else if (c < 256) o += ch;
+                    else o += '?';
+                }
+                return o.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+            };
+            const num = v => String(v).replace('.', ',');
+
+            const pages = [];
+            const images = [];
+            let cur = null, y = 0;
+            const newPage = () => { cur = { ops: [], imgs: new Set() }; pages.push(cur); y = H - M; };
+            const text = (x, yy, t, size, font, color) => {
+                cur.ops.push(`BT /${font || 'F1'} ${size} Tf ${color || '0.1 0.1 0.12 rg'} ${x.toFixed(2)} ${yy.toFixed(2)} Td (${enc(t)}) Tj ET`);
+            };
+            const rect = (x, yy, w, h, color) => cur.ops.push(`${color} ${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+            const hline = (yy, color) => cur.ops.push(`q ${color || '0.82 0.85 0.88 RG'} 0.6 w ${M} ${yy.toFixed(2)} m ${W - M} ${yy.toFixed(2)} l S Q`);
+            const wrap = (t, size, bold, maxW) => {
+                const words = clean(t).split(' ');
+                const lines = [];
+                let line = '';
+                words.forEach(w => {
+                    const test = line ? line + ' ' + w : w;
+                    if (wid(test, size, bold) > maxW && line) { lines.push(line); line = w; } else line = test;
+                });
+                if (line) lines.push(line);
+                return lines;
+            };
+            const ensure = h => { if (y - h < M + 14) newPage(); };
+            const addImage = (bytes, w, h) => { images.push({ bytes, w, h }); return 'Im' + images.length; };
+            const drawImage = (name, x, yy, w, h) => {
+                cur.imgs.add(name);
+                cur.ops.push(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${yy.toFixed(2)} cm /${name} Do Q`);
+            };
+            const b64bytes = b64 => { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+            const heading = t => {
+                ensure(40);
+                y -= 10;
+                text(M, y - 10, t, 13, 'F2', '0.04 0.33 0.42 rg');
+                hline(y - 16, '0.04 0.33 0.42 RG');
+                y -= 28;
+            };
+
+            newPage();
+
+            // Kopfbereich
+            const BAND = 92;
+            rect(0, H - BAND, W, BAND, '0.012 0.025 0.04 rg');
+            const logoEl = document.querySelector('.app-logo');
+            const m = logoEl && /^data:image\/jpeg;base64,(.+)$/.exec(logoEl.src);
+            let tx = M;
+            if (m && logoEl.naturalWidth) {
+                const lh = BAND - 10, lw = lh * logoEl.naturalWidth / logoEl.naturalHeight;
+                drawImage(addImage(b64bytes(m[1]), logoEl.naturalWidth, logoEl.naturalHeight), M, H - BAND + 5, lw, lh);
+                tx = M + lw + 18;
+            }
+            const now = new Date();
+            text(tx, H - 42, 'Messwert-Report', 22, 'F2', '1 1 1 rg');
+            text(tx, H - 60, `Erstellt am ${pad2(now.getDate())}.${pad2(now.getMonth() + 1)}.${now.getFullYear()}, ${pad2(now.getHours())}:${pad2(now.getMinutes())} Uhr`, 9.5, 'F1', '0.75 0.82 0.88 rg');
+            text(tx, H - 74, '© P.Grewe & R.Luerweg', 8, 'F1', '0.55 0.64 0.72 rg');
+            y = H - BAND - 12;
+
+            // Aktueller Stand je Parameter
+            const sorted = [...records].sort((a, b) => recTs(b) - recTs(a));
+            heading('Aktueller Stand je Parameter');
+            const cols = [M, M + 105, M + 225, M + 325, M + 405];
+            rect(M, y - 13, W - 2 * M, 16, '0.92 0.94 0.96 rg');
+            ['Parameter', 'Letzter Wert', 'Sollbereich', 'Status', 'Gemessen am'].forEach((t, i) => text(cols[i] + 3, y - 9, t, 8.5, 'F2', '0.3 0.35 0.4 rg'));
+            y -= 17;
+            Object.keys(thresholds).forEach(k => {
+                const cfg = thresholds[k];
+                const r = sorted.find(x => x.values && x.values[k] !== null && x.values[k] !== undefined && x.values[k] !== '');
+                ensure(18);
+                text(cols[0] + 3, y - 10, cfg.label, 9.5, 'F2');
+                text(cols[2] + 3, y - 10, `${num(cfg.minOpt)} – ${num(cfg.maxOpt)} ${cfg.unit}`, 9);
+                if (r) {
+                    const st = getStatusColorClass(k, r.values[k]);
+                    const col = st.label === 'Optimal' ? '0.04 0.5 0.28 rg' : (st.label === 'Warnung' ? '0.72 0.5 0.02 rg' : '0.75 0.09 0.18 rg');
+                    text(cols[1] + 3, y - 10, `${num(r.values[k])} ${cfg.unit}`, 9.5, 'F2');
+                    text(cols[3] + 3, y - 10, st.label, 9.5, 'F2', col);
+                    text(cols[4] + 3, y - 10, `${r.date.split('-').reverse().slice(0, 2).join('.')}.${r.date.slice(2, 4)}${r.time ? ' ' + r.time : ''}`, 9);
+                } else {
+                    text(cols[1] + 3, y - 10, 'keine Daten', 9, 'F3', '0.5 0.5 0.55 rg');
+                }
+                hline(y - 14);
+                y -= 17;
+            });
+
+            // Verlaufskurve (so wie in der App eingestellt)
+            const cv = document.getElementById('trendChart');
+            if (cv && cv.width > 0 && cv.height > 0 && myChart) {
+                myChart.hover = null;
+                myChart.update();
+                const tmp = document.createElement('canvas');
+                tmp.width = cv.width;
+                tmp.height = cv.height;
+                const tctx = tmp.getContext('2d');
+                tctx.fillStyle = '#07111a';
+                tctx.fillRect(0, 0, tmp.width, tmp.height);
+                tctx.drawImage(cv, 0, 0);
+                const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
+                const cw = W - 2 * M, ch = cw * tmp.height / tmp.width;
+                const rangeName = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[chartPrefs.days] || chartPrefs.days + ' Tage';
+                heading('Verlaufskurve');
+                const caption = wrap(`Zeitraum: ${rangeName} · Parameter: ${chartPrefs.params.map(k => thresholds[k].label).join(', ')}`, 9, false, W - 2 * M);
+                ensure(ch + caption.length * 12 + 8);
+                caption.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
+                y -= 4;
+                drawImage(addImage(jb, tmp.width, tmp.height), M, y - ch, cw, ch);
+                y -= ch + 6;
+                text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Gemeinsame Skala nach Sollbereich (0 % = Soll min, 100 % = Soll max). Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
+                y -= 14;
+            }
+
+            // Historie mit Notizen
+            heading(`Historische Dokumentation (${sorted.length} Einträge)`);
+            sorted.forEach(r => {
+                const vals = Object.keys(thresholds)
+                    .filter(k => r.values && r.values[k] !== null && r.values[k] !== undefined && r.values[k] !== '')
+                    .map(k => `${thresholds[k].label} ${num(r.values[k])} ${thresholds[k].unit}`.trim())
+                    .join('  ·  ');
+                const valLines = vals ? wrap(vals, 9, false, W - 2 * M - 8) : [];
+                const noteLines = r.note ? wrap('Notiz: ' + r.note, 9, false, W - 2 * M - 8) : [];
+                const title = `${r.date.split('-').reverse().join('.')}${r.time ? ', ' + r.time + ' Uhr' : ''}  –  ${r.type || ''}${r.procedure ? ' (' + r.procedure + ')' : ''}`;
+                ensure(18 + valLines.length * 12 + noteLines.length * 12 + 8);
+                text(M, y - 10, title, 9.5, 'F2');
+                y -= 15;
+                valLines.forEach(l => { text(M + 8, y - 8, l, 9); y -= 12; });
+                noteLines.forEach(l => { text(M + 8, y - 8, l, 9, 'F3', '0.55 0.4 0.02 rg'); y -= 12; });
+                y -= 3;
+                hline(y);
+                y -= 6;
+            });
+            if (!sorted.length) { text(M, y - 10, 'Noch keine Einträge vorhanden.', 10, 'F3', '0.5 0.5 0.55 rg'); }
+
+            // Fußzeile
+            pages.forEach((pg, i) => {
+                cur = pg;
+                text(M, 22, 'Reeflog  ·  © P.Grewe & R.Luerweg', 8, 'F1', '0.5 0.55 0.6 rg');
+                const lbl = `Seite ${i + 1} von ${pages.length}`;
+                text(W - M - wid(lbl, 8, false), 22, lbl, 8, 'F1', '0.5 0.55 0.6 rg');
+            });
+
+            // PDF zusammensetzen
+            const to8 = str => { const u = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) u[i] = str.charCodeAt(i) & 255; return u; };
+            const chunks = [];
+            const offs = [];
+            let len = 0;
+            const push = u => { chunks.push(u); len += u.length; };
+            const pushS = str => push(to8(str));
+            const startObj = n => { offs[n] = len; pushS(`${n} 0 obj\n`); };
+            const imgBase = 6;
+            const pageBase = imgBase + images.length;
+            pushS('%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n');
+            startObj(1); pushS('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+            startObj(2); pushS(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pageBase + 2 * i} 0 R`).join(' ')}] /Count ${pages.length} >>\nendobj\n`);
+            ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'].forEach((f, i) => {
+                startObj(3 + i);
+                pushS(`<< /Type /Font /Subtype /Type1 /BaseFont /${f} /Encoding /WinAnsiEncoding >>\nendobj\n`);
+            });
+            images.forEach((im, i) => {
+                startObj(imgBase + i);
+                pushS(`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`);
+                push(im.bytes);
+                pushS('\nendstream\nendobj\n');
+            });
+            pages.forEach((pg, i) => {
+                const pn = pageBase + 2 * i, cn = pn + 1;
+                const xo = [...pg.imgs].map(n => `/${n} ${imgBase + parseInt(n.slice(2), 10) - 1} 0 R`).join(' ');
+                startObj(pn);
+                pushS(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> /XObject << ${xo} >> >> /Contents ${cn} 0 R >>\nendobj\n`);
+                const content = to8(pg.ops.join('\n'));
+                startObj(cn);
+                pushS(`<< /Length ${content.length} >>\nstream\n`);
+                push(content);
+                pushS('\nendstream\nendobj\n');
+            });
+            const total = pageBase + 2 * pages.length;
+            const xrefPos = len;
+            let xref = `xref\n0 ${total}\n0000000000 65535 f \n`;
+            for (let n = 1; n < total; n++) xref += `${String(offs[n]).padStart(10, '0')} 00000 n \n`;
+            pushS(xref + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`);
+            return new Blob(chunks, { type: 'application/pdf' });
+        }
+
         // ===== Datensicherung =====
         const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs'];
 
