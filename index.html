@@ -1454,34 +1454,75 @@
             document.addEventListener('visibilitychange', () => { if (!document.hidden) tmTick(); });
             document.addEventListener('pointerdown', () => { if (tm.state === 'run') tmUnlock(); }, { passive: true });
         }
+        // Alarmton als Audio-Element (läuft auf dem iPhone auch bei Stumm-Schalter) und als Endlosschleife bis zum Beenden
+        let tmEl = null, tmLoop = null;
+        function tmMakeWav() {
+            const sr = 22050, n = Math.floor(sr * 2.6);
+            const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+            const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+            w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+            v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+            v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+            w(36, 'data'); v.setUint32(40, n * 2, true);
+            const tones = [[660, 0], [880, 0.3]];
+            for (let i = 0; i < n; i++) {
+                const t = i / sr; let x = 0;
+                tones.forEach(([f, o]) => {
+                    const u = t - o;
+                    if (u >= 0 && u < 0.6) x += Math.sin(2 * Math.PI * f * u) * Math.min(u / 0.03, 1) * Math.exp(-u * 6);
+                });
+                v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x * 0.4)) * 32767, true);
+            }
+            return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+        }
         function tmUnlock() {
+            try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+            try {
+                if (!tmEl) { tmEl = new Audio(tmMakeWav()); tmEl.loop = true; tmEl.preload = 'auto'; }
+                if (tmEl.paused && !tmEl.dataset.on) {
+                    tmEl.muted = true;
+                    const pr = tmEl.play();
+                    if (pr && pr.then) pr.then(() => { if (!tmEl.dataset.on) { tmEl.pause(); tmEl.currentTime = 0; } tmEl.muted = false; }).catch(() => { tmEl.muted = false; });
+                }
+            } catch (e) {}
             try {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 if (!AC) return;
                 if (!tmAudio) tmAudio = new AC();
                 if (tmAudio.state === 'suspended') tmAudio.resume();
-                const b = tmAudio.createBuffer(1, 1, 22050), src = tmAudio.createBufferSource();
-                src.buffer = b; src.connect(tmAudio.destination); src.start(0);
             } catch (e) {}
         }
         function tmChime() {
             try {
-                tmUnlock();
                 const c = tmAudio; if (!c) return;
-                let t = c.currentTime + 0.05;
-                for (let i = 0; i < 3; i++) {
-                    [[660, 0], [880, 0.3]].forEach(([f, o]) => {
-                        const osc = c.createOscillator(), g = c.createGain();
-                        osc.type = 'sine'; osc.frequency.value = f;
-                        g.gain.setValueAtTime(0.0001, t + o);
-                        g.gain.exponentialRampToValueAtTime(0.12, t + o + 0.04);
-                        g.gain.exponentialRampToValueAtTime(0.0001, t + o + 0.55);
-                        osc.connect(g); g.connect(c.destination);
-                        osc.start(t + o); osc.stop(t + o + 0.6);
-                    });
-                    t += 1.4;
+                const t = c.currentTime + 0.05;
+                [[660, 0], [880, 0.3]].forEach(([f, o]) => {
+                    const osc = c.createOscillator(), g = c.createGain();
+                    osc.type = 'sine'; osc.frequency.value = f;
+                    g.gain.setValueAtTime(0.0001, t + o);
+                    g.gain.exponentialRampToValueAtTime(0.12, t + o + 0.04);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + o + 0.55);
+                    osc.connect(g); g.connect(c.destination);
+                    osc.start(t + o); osc.stop(t + o + 0.6);
+                });
+            } catch (e) {}
+        }
+        function tmAlarmStart() {
+            tmAlarmStop();
+            let ok = false;
+            try {
+                if (tmEl) {
+                    tmEl.dataset.on = '1'; tmEl.muted = false; tmEl.currentTime = 0;
+                    const pr = tmEl.play();
+                    if (pr && pr.catch) pr.catch(() => { delete tmEl.dataset.on; tmChime(); tmLoop = setInterval(tmChime, 2600); });
+                    ok = true;
                 }
             } catch (e) {}
+            if (!ok) { tmChime(); tmLoop = setInterval(tmChime, 2600); }
+        }
+        function tmAlarmStop() {
+            try { if (tmEl) { delete tmEl.dataset.on; tmEl.pause(); tmEl.currentTime = 0; } } catch (e) {}
+            if (tmLoop) { clearInterval(tmLoop); tmLoop = null; }
         }
         function tmWakeOn() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { tmWake = l; }).catch(() => {}); } catch (e) {} }
         function tmWakeOff() { try { if (tmWake) { tmWake.release(); tmWake = null; } } catch (e) {} }
@@ -1497,7 +1538,7 @@
             tm.state = 'done'; tm.left = 0;
             clearInterval(tmTimer); tmTimer = null;
             tmWakeOff(); tmSave();
-            tmChime();
+            tmAlarmStart();
             try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
             const panel = document.getElementById('timerPanel');
             if (panel && !panel.offsetParent) document.getElementById('tmToast').style.display = 'block';
@@ -1509,11 +1550,12 @@
             const panel = document.getElementById('timerPanel');
             panel.classList.toggle('run', tm.state === 'run');
             panel.classList.toggle('done', tm.state === 'done');
-            document.getElementById('tmMain').textContent = { idle: '▶ Start', run: '⏸ Pause', pause: '▶ Weiter', done: '▶ Neu starten' }[tm.state];
+            document.getElementById('tmMain').textContent = { idle: '▶ Start', run: '⏸ Pause', pause: '▶ Weiter', done: '⏹ Beenden' }[tm.state];
             if (tm.state !== 'done') document.getElementById('tmToast').style.display = 'none';
         }
         function tmStart(sec) {
             if (!(sec > 0)) return;
+            tmAlarmStop();
             tmUnlock();
             tm = { state: 'run', total: sec * 1000, end: Date.now() + sec * 1000, left: sec * 1000 };
             tmEnsureTick(); tmWakeOn(); tmSave(); tmRender();
@@ -1525,6 +1567,8 @@
                 clearInterval(tmTimer); tmTimer = null; tmWakeOff();
             } else if (tm.state === 'pause') {
                 tm.end = Date.now() + tm.left; tm.state = 'run'; tmEnsureTick(); tmWakeOn();
+            } else if (tm.state === 'done') {
+                tmReset(); return;
             } else {
                 const m = parseFloat(document.getElementById('tmMin').value) || 0;
                 const sc = parseFloat(document.getElementById('tmSec').value) || 0;
@@ -1536,7 +1580,7 @@
         }
         function tmReset() {
             tm = { state: 'idle', total: tm.total, end: 0, left: 0 };
-            clearInterval(tmTimer); tmTimer = null; tmWakeOff();
+            clearInterval(tmTimer); tmTimer = null; tmWakeOff(); tmAlarmStop();
             document.getElementById('tmToast').style.display = 'none';
             tmSave(); tmRender();
         }
