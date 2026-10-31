@@ -1457,7 +1457,7 @@
         // Alarmton als Audio-Element (läuft auf dem iPhone auch bei Stumm-Schalter) und als Endlosschleife bis zum Beenden
         let tmEl = null, tmLoop = null;
         function tmMakeWav() {
-            const sr = 22050, n = Math.floor(sr * 2.6);
+            const sr = 22050, n = Math.floor(sr * 3.4), lead = 0.8;
             const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
             const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
             w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
@@ -1468,7 +1468,7 @@
             for (let i = 0; i < n; i++) {
                 const t = i / sr; let x = 0;
                 tones.forEach(([f, o]) => {
-                    const u = t - o;
+                    const u = t - o - lead;
                     if (u >= 0 && u < 0.6) x += Math.sin(2 * Math.PI * f * u) * Math.min(u / 0.03, 1) * Math.exp(-u * 6);
                 });
                 v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x * 0.4)) * 32767, true);
@@ -1480,9 +1480,9 @@
             try {
                 if (!tmEl) { tmEl = new Audio(tmMakeWav()); tmEl.loop = true; tmEl.preload = 'auto'; }
                 if (tmEl.paused && !tmEl.dataset.on) {
-                    tmEl.muted = true;
+                    tmEl.muted = true; tmEl.volume = 0; tmEl.currentTime = 0;
                     const pr = tmEl.play();
-                    if (pr && pr.then) pr.then(() => { if (!tmEl.dataset.on) { tmEl.pause(); tmEl.currentTime = 0; } tmEl.muted = false; }).catch(() => { tmEl.muted = false; });
+                    if (pr && pr.then) pr.then(() => { if (!tmEl.dataset.on) { tmEl.pause(); tmEl.currentTime = 0; } tmEl.muted = false; tmEl.volume = 1; }).catch(() => { tmEl.muted = false; tmEl.volume = 1; });
                 }
             } catch (e) {}
             try {
@@ -1512,7 +1512,7 @@
             let ok = false;
             try {
                 if (tmEl) {
-                    tmEl.dataset.on = '1'; tmEl.muted = false; tmEl.currentTime = 0;
+                    tmEl.dataset.on = '1'; tmEl.muted = false; tmEl.volume = 1; tmEl.currentTime = 0.8;
                     const pr = tmEl.play();
                     if (pr && pr.catch) pr.catch(() => { delete tmEl.dataset.on; tmChime(); tmLoop = setInterval(tmChime, 2600); });
                     ok = true;
