@@ -2168,7 +2168,7 @@
         let dosingLog = (() => { try { const x = JSON.parse(localStorage.getItem('pepeaqua_dosing')); return Array.isArray(x) ? x : []; } catch (e) { return []; } })();
         function saveDosing() { try { localStorage.setItem('pepeaqua_dosing', JSON.stringify(dosingLog)); } catch (e) {} }
         const DOSE_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
-        let doseRange = 30, doseSel = new Set(DOSE_PARAMS);
+        let doseRange = 30, doseSel = new Set(DOSE_PARAMS), doseHover = null;
         function logDose(slot, v) {
             const last = dosingLog.filter(e => e.slot === slot).sort((a, b) => a.ts - b.ts).pop();
             if (last ? last.v === v : v === 0) return;
@@ -2183,10 +2183,14 @@
             });
             if (ch) saveDosing();
         }
-        function setDoseRange(d) { doseRange = d; renderDoseChart(); }
-        function toggleDoseParam(k) { if (doseSel.has(k)) doseSel.delete(k); else doseSel.add(k); renderDoseChart(); }
-        function doseEvents(k) { return dosingLog.filter(e => e.slot === k + '_up').sort((a, b) => a.ts - b.ts); }
-        function doseValueAt(k, ts) { let v = null; doseEvents(k).forEach(e => { if (e.ts <= ts) v = e.v; }); return v; }
+        function setDoseRange(d) { doseRange = d; doseHover = null; renderDoseChart(); }
+        function toggleDoseParam(k) { if (doseSel.has(k)) doseSel.delete(k); else doseSel.add(k); doseHover = null; renderDoseChart(); }
+        // Die erste Eingabe gilt ab dem Tag selbst (die Dosierung lief ja schon), jede spätere Änderung ab dem Folgetag
+        function doseEvents(k) {
+            return dosingLog.filter(e => e.slot === k + '_up').sort((a, b) => a.ts - b.ts)
+                .map((e, i) => Object.assign({}, e, { eff: startOfDay(e.ts) + (i === 0 ? 0 : DAY_MS) }));
+        }
+        function doseValueAt(k, ts) { let v = null; doseEvents(k).forEach(e => { if (e.eff <= ts) v = e; }); return v; }
         function doseUnit(k) { const p = appSettings.products && appSettings.products[k + '_up']; return (p && p.unit) || 'ml'; }
         function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
 
@@ -2220,14 +2224,14 @@
                 if (!doseSel.has(k)) return;
                 const ev = doseEvents(k); if (!ev.length) return;
                 let pts = [], before = null;
-                ev.forEach(e => { if (e.ts <= from) before = e; });
+                ev.forEach(e => { if (e.eff <= from) before = e; });
                 if (before) pts.push({ ts: from, v: before.v });
-                ev.forEach(e => { if (e.ts > from && e.ts <= to) pts.push({ ts: e.ts, v: e.v }); });
+                ev.forEach(e => { if (e.eff > from && e.eff <= to) pts.push({ ts: e.eff, v: e.v }); });
                 if (pts.length) series.push({ k, pts, max: Math.max(...pts.map(q => q.v), 0.000001) });
             });
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert.')
+                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis ein, dann entsteht hier dein Verlauf.';
             doseLayout = null;
             if (!series.length) return;
@@ -2267,6 +2271,41 @@
                 sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 3, 0, Math.PI * 2); ctx.fill(); });
             });
             doseLayout = { from, to, L, R, W };
+            if (doseHover !== null && doseHover >= from && doseHover <= to) {
+                const hx = X(doseHover), d0 = new Date(doseHover);
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
+                const rows = [];
+                series.forEach(sr => {
+                    const e = doseValueAt(sr.k, doseHover);
+                    if (!e) return;
+                    const sd = new Date(e.eff);
+                    rows.push({ dot: paramColors[sr.k], text: `${thresholds[sr.k].label}: ${e.v > 0 ? fmtNum(e.v) + ' ' + doseUnit(sr.k) + ' pro Tag' : 'keine Dosierung'} (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)` });
+                });
+                if (!rows.length) rows.push({ text: 'noch keine Dosierung erfasst' });
+                const title = `${pad2(d0.getDate())}.${pad2(d0.getMonth() + 1)}.${d0.getFullYear()}`;
+                const font = 'system-ui, sans-serif';
+                ctx.font = `bold 11px ${font}`;
+                let bw = ctx.measureText(title).width;
+                ctx.font = `11px ${font}`;
+                rows.forEach(r => { bw = Math.max(bw, ctx.measureText(r.text).width + (r.dot ? 12 : 0)); });
+                bw += 16;
+                const bh = 28 + 16 * rows.length;
+                const bx = Math.min(Math.max(hx - bw / 2, 4), W - bw - 4);
+                const by = Math.max(T + 4, 2);
+                ctx.fillStyle = 'rgba(2, 8, 19, 0.94)'; ctx.strokeStyle = 'rgba(79, 227, 238, 0.35)'; ctx.lineWidth = 1;
+                ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 8); else ctx.rect(bx, by, bw, bh);
+                ctx.fill(); ctx.stroke();
+                ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+                ctx.font = `bold 11px ${font}`; ctx.fillStyle = '#f0f4f8';
+                ctx.fillText(title, bx + 8, by + 14);
+                ctx.font = `11px ${font}`;
+                rows.forEach((r, i) => {
+                    const ry = by + 30 + 16 * i; let tx = bx + 8;
+                    if (r.dot) { ctx.fillStyle = r.dot; ctx.beginPath(); ctx.arc(bx + 12, ry, 3.5, 0, Math.PI * 2); ctx.fill(); tx = bx + 20; }
+                    ctx.fillStyle = '#f0f4f8'; ctx.fillText(r.text, tx, ry);
+                });
+            }
         }
         let doseLayout = null;
         function niceMax(v) {
@@ -2277,13 +2316,9 @@
             if (!doseLayout) return;
             const r = ev.currentTarget.getBoundingClientRect(), x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
             const { from, to, L, R, W } = doseLayout;
-            const ts = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
-            const d = new Date(ts);
-            const parts = DOSE_PARAMS.filter(k => doseSel.has(k)).map(k => {
-                const v = doseValueAt(k, ts);
-                return v === null ? null : `${thresholds[k].label}: ${v > 0 ? fmtNum(v) + ' ' + doseUnit(k) : 'keine Dosierung'}`;
-            }).filter(Boolean);
-            document.getElementById('doseHint').textContent = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} – ${parts.length ? parts.join(' · ') : 'noch keine Dosierung erfasst'}`;
+            if (x < L - 4 || x > W - R + 4) doseHover = null;
+            else doseHover = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+            renderDoseChart();
         }
 
         function renderProductSettings() {
