@@ -2194,47 +2194,7 @@
         function doseUnit(k) { const p = appSettings.products && appSettings.products[k + '_up']; return (p && p.unit) || 'ml'; }
         function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
 
-        function renderDoseChart() {
-            const cv = document.getElementById('doseCanvas');
-            if (!cv) return;
-            document.querySelectorAll('.dose-range-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.days) === doseRange));
-            document.getElementById('doseChips').innerHTML = DOSE_PARAMS.map(k => {
-                const on = doseSel.has(k), c = paramColors[k];
-                return `<button type="button" class="chip${on ? ' active' : ''}" style="--c:${c};--cbg:${c}26" aria-pressed="${on}" onclick="toggleDoseParam('${k}')">${thresholds[k].label}</button>`;
-            }).join('');
-            // Liste der Einträge
-            const rows = dosingLog.map((e, i) => ({ e, i })).sort((a, b) => b.e.ts - a.e.ts);
-            document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
-                const k = e.slot.split('_')[0], d = new Date(e.ts);
-                const p = appSettings.products[e.slot] || {};
-                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())} · ${e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung'}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
-            }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
-
-            const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
-            if (!W) return;
-            const dpr = window.devicePixelRatio || 1;
-            cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-            cv.style.width = W + 'px'; cv.style.height = H + 'px';
-            const ctx = cv.getContext('2d');
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            ctx.clearRect(0, 0, W, H);
-            const to = Date.now(), from = to - doseRange * DAY_MS;
-            const series = [];
-            DOSE_PARAMS.forEach(k => {
-                if (!doseSel.has(k)) return;
-                const ev = doseEvents(k); if (!ev.length) return;
-                let pts = [], before = null;
-                ev.forEach(e => { if (e.eff <= from) before = e; });
-                if (before) pts.push({ ts: from, v: before.v });
-                ev.forEach(e => { if (e.eff > from && e.eff <= to) pts.push({ ts: e.eff, v: e.v }); });
-                if (pts.length) series.push({ k, pts, max: Math.max(...pts.map(q => q.v), 0.000001) });
-            });
-            document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
-            document.getElementById('doseHint').textContent = series.length
-                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
-                : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis ein, dann entsteht hier dein Verlauf.';
-            doseLayout = null;
-            if (!series.length) return;
+        function drawDoseChart(ctx, W, H, series, from, to, hover) {
             const L = 44, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
             const single = series.length === 1;
             const ymax = single ? niceMax(series[0].max * 1.15) : 100;
@@ -2270,14 +2230,14 @@
                 ctx.fillStyle = col;
                 sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 3, 0, Math.PI * 2); ctx.fill(); });
             });
-            doseLayout = { from, to, L, R, W };
-            if (doseHover !== null && doseHover >= from && doseHover <= to) {
-                const hx = X(doseHover), d0 = new Date(doseHover);
+            const layout = { from, to, L, R, W };
+            if (hover !== null && hover !== undefined && hover >= from && hover <= to) {
+                const hx = X(hover), d0 = new Date(hover);
                 ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
                 ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
                 const rows = [];
                 series.forEach(sr => {
-                    const e = doseValueAt(sr.k, doseHover);
+                    const e = doseValueAt(sr.k, hover);
                     if (!e) return;
                     const sd = new Date(e.eff);
                     rows.push({ dot: paramColors[sr.k], text: `${thresholds[sr.k].label}: ${e.v > 0 ? fmtNum(e.v) + ' ' + doseUnit(sr.k) + ' pro Tag' : 'keine Dosierung'} (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)` });
@@ -2306,6 +2266,52 @@
                     ctx.fillStyle = '#f0f4f8'; ctx.fillText(r.text, tx, ry);
                 });
             }
+            return layout;
+        }
+        function doseSeriesFor(days, sel) {
+            const to = Date.now(), from = to - days * DAY_MS, series = [];
+            DOSE_PARAMS.forEach(k => {
+                if (!sel.has(k)) return;
+                const ev = doseEvents(k); if (!ev.length) return;
+                let pts = [], before = null;
+                ev.forEach(e => { if (e.eff <= from) before = e; });
+                if (before) pts.push({ ts: from, v: before.v });
+                ev.forEach(e => { if (e.eff > from && e.eff <= to) pts.push({ ts: e.eff, v: e.v }); });
+                if (pts.length) series.push({ k, pts, max: Math.max(...pts.map(q => q.v), 0.000001) });
+            });
+            return { series, from, to };
+        }
+
+        function renderDoseChart() {
+            const cv = document.getElementById('doseCanvas');
+            if (!cv) return;
+            document.querySelectorAll('.dose-range-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.days) === doseRange));
+            document.getElementById('doseChips').innerHTML = DOSE_PARAMS.map(k => {
+                const on = doseSel.has(k), c = paramColors[k];
+                return `<button type="button" class="chip${on ? ' active' : ''}" style="--c:${c};--cbg:${c}26" aria-pressed="${on}" onclick="toggleDoseParam('${k}')">${thresholds[k].label}</button>`;
+            }).join('');
+            // Liste der Einträge
+            const rows = dosingLog.map((e, i) => ({ e, i })).sort((a, b) => b.e.ts - a.e.ts);
+            document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
+                const k = e.slot.split('_')[0], d = new Date(e.ts);
+                const p = appSettings.products[e.slot] || {};
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())} · ${e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung'}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+            }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
+
+            const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
+            if (!W) return;
+            const dpr = window.devicePixelRatio || 1;
+            cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+            cv.style.width = W + 'px'; cv.style.height = H + 'px';
+            const ctx = cv.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, W, H);
+            const { series, from, to } = doseSeriesFor(doseRange, doseSel);
+            document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
+            document.getElementById('doseHint').textContent = series.length
+                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis ein, dann entsteht hier dein Verlauf.';
+            doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
         let doseLayout = null;
         function niceMax(v) {
@@ -2517,6 +2523,37 @@
                 y -= 16;
             }
 
+            // Aktuelle Tagesdosis
+            {
+                const nowTs = Date.now();
+                const rowsD = [];
+                DOSE_PARAMS.forEach(k => {
+                    const ev = doseEvents(k); if (!ev.length) return;
+                    const cur = doseValueAt(k, nowTs);
+                    const next = ev.find(e => e.eff > nowTs);
+                    const p = (appSettings.products && appSettings.products[k + '_up']) || {};
+                    rowsD.push({ k, p, cur, next });
+                });
+                if (rowsD.length) {
+                    heading('Aktuelle Tagesdosis');
+                    const dc = [M, M + 105, M + 265, M + 395];
+                    rect(M, y - 13, W - 2 * M, 16, '0.92 0.94 0.96 rg');
+                    ['Parameter', 'Produkt', 'Tagesdosis', 'Gilt seit'].forEach((t, i) => text(dc[i] + 3, y - 9, t, 8.5, 'F2', '0.3 0.35 0.4 rg'));
+                    y -= 17;
+                    const fd = ts => { const d = new Date(ts); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`; };
+                    rowsD.forEach(r => {
+                        ensure(18);
+                        text(dc[0] + 3, y - 10, thresholds[r.k].label, 9.5, 'F2');
+                        text(dc[1] + 3, y - 10, (r.p.name || '-').slice(0, 30), 9);
+                        const u = r.p.unit || 'ml';
+                        text(dc[2] + 3, y - 10, r.cur ? (r.cur.v > 0 ? `${num(r.cur.v)} ${u} pro Tag` : 'keine Dosierung') : '-', 9.5, 'F2');
+                        text(dc[3] + 3, y - 10, r.cur ? fd(r.cur.eff) + (r.next ? `  (ab ${fd(r.next.eff)}: ${num(r.next.v)} ${u})` : '') : '-', 9);
+                        hline(y - 14);
+                        y -= 17;
+                    });
+                }
+            }
+
             // Verlaufskurve (so wie in der App eingestellt)
             const cv = document.getElementById('trendChart');
             if (cv && cv.width > 0 && cv.height > 0 && myChart) {
@@ -2541,6 +2578,53 @@
                 y -= ch + 6;
                 text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Gemeinsame Skala nach Sollbereich (0 % = Soll min, 100 % = Soll max, Ø = Durchschnitt des Sollbereichs). Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
                 y -= 14;
+            }
+
+            // Dosierverlauf
+            {
+                const { series, from, to } = doseSeriesFor(doseRange, doseSel);
+                const log = dosingLog.filter(e => e.slot).slice().sort((a, b) => a.ts - b.ts);
+                if (series.length || log.length) {
+                    heading('Dosierverlauf (Tagesdosis)');
+                    if (series.length) {
+                        const lw = 520, lh = 230, sc = 2;
+                        const tmp = document.createElement('canvas');
+                        tmp.width = lw * sc; tmp.height = lh * sc;
+                        const tctx = tmp.getContext('2d');
+                        tctx.fillStyle = '#07111a'; tctx.fillRect(0, 0, tmp.width, tmp.height);
+                        tctx.setTransform(sc, 0, 0, sc, 0, 0);
+                        drawDoseChart(tctx, lw, lh, series, from, to, null);
+                        const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
+                        const cw = W - 2 * M, ch = cw * lh / lw;
+                        const rn = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[doseRange] || doseRange + ' Tage';
+                        const cap = wrap(`Zeitraum: ${rn} · ${series.length > 1 ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
+                        ensure(ch + cap.length * 12 + 8);
+                        cap.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
+                        y -= 4;
+                        drawImage(addImage(jb, tmp.width, tmp.height), M, y - ch, cw, ch);
+                        y -= ch + 10;
+                    }
+                    if (log.length) {
+                        ensure(30);
+                        text(M, y - 9, 'Änderungen der Tagesdosis (gilt jeweils ab dem Folgetag)', 9.5, 'F2');
+                        y -= 18;
+                        const lc = [M, M + 85, M + 185, M + 355];
+                        rect(M, y - 13, W - 2 * M, 16, '0.92 0.94 0.96 rg');
+                        ['Datum', 'Parameter', 'Produkt', 'Tagesdosis'].forEach((t, i) => text(lc[i] + 3, y - 9, t, 8.5, 'F2', '0.3 0.35 0.4 rg'));
+                        y -= 17;
+                        log.slice(-40).reverse().forEach(e => {
+                            const k = e.slot.split('_')[0], p = (appSettings.products && appSettings.products[e.slot]) || {};
+                            const d = new Date(e.ts);
+                            ensure(16);
+                            text(lc[0] + 3, y - 9, `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`, 9);
+                            text(lc[1] + 3, y - 9, thresholds[k] ? thresholds[k].label : k, 9, 'F2');
+                            text(lc[2] + 3, y - 9, (p.name || '-').slice(0, 32), 9);
+                            text(lc[3] + 3, y - 9, e.v > 0 ? `${num(e.v)} ${p.unit || 'ml'} pro Tag` : 'keine Dosierung', 9);
+                            hline(y - 12);
+                            y -= 15;
+                        });
+                    }
+                }
             }
 
             // Historie mit Notizen
