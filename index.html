@@ -375,7 +375,7 @@
             margin-bottom: 10px;
             border: 1px solid rgba(255,255,255,0.05);
         }
-        .range-btn {
+        .range-btn, .dose-range-btn {
             flex: 1;
             background: none;
             border: none;
@@ -387,7 +387,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .range-btn.active {
+        .range-btn.active, .dose-range-btn.active {
             background: rgba(255,255,255,0.1);
             color: #fff;
             box-shadow: inset 0 1px 3px rgba(255,255,255,0.1);
@@ -634,6 +634,9 @@
         }
 
         /* PDF & Action Buttons layout */
+        .meth-sel { margin-bottom: 6px; font-size: 0.85rem; padding: 8px 10px; }
+        .val-prev { font-size: 0.72rem; color: var(--color-sal); margin-top: 4px; min-height: 0; }
+        .val-prev.err { color: #ff8aa0; }
         .timer-panel { padding: 14px 16px; }
         .tm-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .tm-title { font-weight: 700; font-size: 0.95rem; }
@@ -742,7 +745,7 @@
         <button class="tab-btn" data-tab="targets" onclick="switchTab('targets')">🎯 Sollwerte</button>
     </div>
 
-    <div class="tm-toast" id="tmToast" onclick="tmReset()">⏰ Countdown abgelaufen – tippen zum Beenden</div>
+    <div class="tm-toast" id="tmToast" onclick="tmDismissAll()">⏰ Countdown abgelaufen – tippen zum Beenden</div>
 
     <div class="container">
 
@@ -865,6 +868,28 @@
 
         <!-- DOSIERUNGEN TAB -->
         <div id="dosing" class="tab-content">
+            <div class="glass-panel" id="dosePanel">
+                <div style="font-weight: 700; margin-bottom: 12px;">📈 Dosierverlauf (Tagesdosis)</div>
+                <div class="chart-controls">
+                    <div class="range-toggle" id="doseRange">
+                        <button type="button" class="dose-range-btn" data-days="7" onclick="setDoseRange(7)">7 Tage</button>
+                        <button type="button" class="dose-range-btn" data-days="30" onclick="setDoseRange(30)">1 Monat</button>
+                        <button type="button" class="dose-range-btn" data-days="90" onclick="setDoseRange(90)">3 Monate</button>
+                        <button type="button" class="dose-range-btn" data-days="365" onclick="setDoseRange(365)">12 Monate</button>
+                    </div>
+                    <div class="chip-row" id="doseChips"></div>
+                </div>
+                <div class="chart-box" style="height: 230px;">
+                    <canvas id="doseCanvas"></canvas>
+                    <div id="doseEmpty" class="chart-empty">Noch keine Tagesdosis eingetragen</div>
+                </div>
+                <div class="chart-hint" id="doseHint"></div>
+                <details style="margin-top: 10px;">
+                    <summary style="cursor: pointer; font-size: 0.8rem; color: var(--text-muted);">Einträge der Tagesdosis anzeigen</summary>
+                    <div id="doseLogList" style="margin-top: 8px;"></div>
+                </details>
+            </div>
+
             <div class="glass-panel" id="productSettings">
                 <h2 style="font-size:1.1rem; margin-bottom:6px;">🧪 Produkte &amp; Dosierung</h2>
                 <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Trage hier deine eigenen Produkte ein, so wie auf dem Etikett angegeben, z. B. „1 ml erhöht KH um 0,1 dKH in 100 Litern“. Bei KH, Calcium, Nitrat und Phosphat kannst du zusätzlich deine aktuelle Tagesdosis eintragen. Alle Mengenangaben in den Empfehlungen werden daraus berechnet.</div>
@@ -874,22 +899,7 @@
 
         <!-- INPUT TAB -->
         <div id="input" class="tab-content">
-            <div class="glass-panel timer-panel" id="timerPanel">
-                <div class="tm-top"><span class="tm-title">⏱️ Countdown</span><span class="tm-display" id="tmDisplay">00:00</span></div>
-                <div class="tm-presets">
-                    <button type="button" onclick="tmStart(60)">1 Min</button>
-                    <button type="button" onclick="tmStart(180)">3 Min</button>
-                    <button type="button" onclick="tmStart(300)">5 Min</button>
-                    <button type="button" onclick="tmStart(420)">7 Min</button>
-                </div>
-                <div class="tm-custom">
-                    <input type="number" id="tmMin" class="input-styled" min="0" max="999" inputmode="numeric" placeholder="Min">
-                    <span>:</span>
-                    <input type="number" id="tmSec" class="input-styled" min="0" max="59" inputmode="numeric" placeholder="Sek">
-                    <button type="button" class="tm-main" id="tmMain" onclick="tmMainClick()">▶ Start</button>
-                    <button type="button" onclick="tmReset()">↺</button>
-                </div>
-            </div>
+            <div id="timerBox"></div>
             <div class="glass-panel form-container">
                 <div class="type-toggle-container">
                     <div id="toggleHome" class="type-toggle active" onclick="setRecordType('Heimtest')">🏠 Heim-Wassertest</div>
@@ -909,7 +919,7 @@
                     </div>
                     <div style="font-size: 0.75rem; color: var(--text-muted); margin: -6px 0 12px;">Mehrere Messungen am selben Tag? Einfach erneut mit anderer Uhrzeit eintragen.</div>
 
-                    <div class="form-group" id="procedureGroup">
+                    <div class="form-group" id="procedureGroup" style="display:none;">
                             <label id="procedureLabel" for="testProcedure">Testverfahren</label>
                             <select id="testProcedure" class="input-styled">
                                 <option value="Tröpfchentest (Salifert)">Tröpfchentest (Salifert)</option>
@@ -926,50 +936,7 @@
                     </div>
 
                     <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 5px;"></div>
-
-                    <div class="form-row-grid">
-                        <div class="form-group">
-                            <label style="color:var(--color-kh)">KH (°dKH)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_kh" class="input-styled" placeholder="z.B. 7.5">
-                        </div>
-                        <div class="form-group">
-                            <label style="color:var(--color-sal)">Salzgehalt (psu / ‰)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_sal" class="input-styled" placeholder="z.B. 35">
-                        </div>
-                    </div>
-
-                    <div class="form-row-grid">
-                        <div class="form-group">
-                            <label style="color:var(--color-ca)">Calcium (mg/l)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_ca" class="input-styled" placeholder="z.B. 420">
-                        </div>
-                        <div class="form-group">
-                            <label style="color:var(--color-mg)">Magnesium (mg/l)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_mg" class="input-styled" placeholder="z.B. 1350">
-                        </div>
-                    </div>
-
-                    <div class="form-row-grid">
-                        <div class="form-group">
-                            <label style="color:var(--color-no3)">Nitrat (mg/l)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_no3" class="input-styled" placeholder="z.B. 5.0">
-                        </div>
-                        <div class="form-group">
-                            <label style="color:var(--color-po4)">Phosphat (mg/l)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_po4" class="input-styled" placeholder="z.B. 0.04">
-                        </div>
-                    </div>
-
-                    <div class="form-row-grid">
-                        <div class="form-group">
-                            <label style="color:var(--color-temp)">Temperatur (°C)</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_temp" class="input-styled" placeholder="z.B. 25.0">
-                        </div>
-                        <div class="form-group">
-                            <label style="color:var(--color-ph)">pH-Wert</label>
-                            <input type="number" step="any" inputmode="decimal" id="val_ph" class="input-styled" placeholder="z.B. 8.2">
-                        </div>
-                    </div>
+                    <div id="valueFields"></div>
 
                     <div class="form-group">
                         <label for="testNote">📝 Notiz / Tagebuch (optional)</label>
@@ -986,7 +953,7 @@
     <script>
         // Thresholds structure definitions
         const thresholds = {
-            sal: { minOpt: 34, maxOpt: 36, minTol: 33, maxTol: 37, label: "Salinität", unit: "psu" },
+            sal: { minOpt: 34, maxOpt: 36, minTol: 33, maxTol: 37, label: "Salzgehalt", unit: "psu" },
             kh: { minOpt: 7.4, maxOpt: 8.3, minTol: 6.8, maxTol: 8.5, label: "KH", unit: "°dKH" },
             ca: { minOpt: 410, maxOpt: 435, minTol: 400, maxTol: 445, label: "Calcium", unit: "mg/l" },
             mg: { minOpt: 1300, maxOpt: 1400, minTol: 1200, maxTol: 1500, label: "Magnesium", unit: "mg/l" },
@@ -1004,7 +971,11 @@
         // Init App
         document.addEventListener('DOMContentLoaded', () => {
             applyThresholds();
+            seedDosing();
+            const dc = document.getElementById('doseCanvas');
+            if (dc) { dc.addEventListener('click', doseTap); window.addEventListener('resize', () => { if (document.getElementById('dosing').classList.contains('active')) renderDoseChart(); }); }
             tmInit();
+            setRecordType('Heimtest');
             setFormNow();
             const imgD = document.getElementById('imgDate'); if (imgD) imgD.valueAsDate = new Date();
             renderDashboard();
@@ -1055,12 +1026,107 @@
             
             document.getElementById(tabId).classList.add('active');
             if (tabId === 'input' && formIsEmpty()) setFormNow();
-            if (tabId === 'dosing') renderProductSettings();
+            if (tabId === 'dosing') { renderProductSettings(); renderDoseChart(); }
             if (tabId === 'targets') renderTargetRows();
             
             if (tabId === 'dashboard') {
                 setTimeout(() => { if(myChart) myChart.update(); }, 50);
             }
+            tmRender();
+        }
+
+
+        // ===== Messmethoden je Wert und Umrechnung =====
+        // Salifert-Spritzentabellen: abgelesene ml (0,00 bis 1,00 in 0,02er-Schritten) -> Messwert
+        const SYR = {
+            kh: [15.7,15.3,15.0,14.7,14.4,14.1,13.7,13.4,13.1,12.8,12.5,12.1,11.8,11.5,11.2,10.9,10.5,10.2,9.9,9.6,9.3,8.9,8.6,8.3,8.0,7.7,7.3,7.0,6.7,6.4,6.1,5.7,5.4,5.1,4.8,4.5,4.1,3.8,3.5,3.2,2.8,2.5,2.2,1.9,1.6,1.2,0.9,0.6,0.3,0,0],
+            ca: Array.from({ length: 51 }, (_, i) => 500 - 10 * i),
+            mg: Array.from({ length: 51 }, (_, i) => 1500 - 30 * i)
+        };
+        const SYR_DEC = { kh: 1, ca: 0, mg: 0 };
+        const M = (id, label, extra) => Object.assign({ id, label }, extra || {});
+        const METHODS = {
+            kh: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
+            sal: [M('refraktometer', 'Refraktometer'), M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('other', 'Sonstiges')],
+            ca: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,15' }), M('hanna', 'Hanna Checker'), M('jbl', 'JBL (Tropfen)', { conv: 'drops', factor: 20, inLabel: 'Tropfen', ph: 'z. B. 21' }), M('other', 'Sonstiges')],
+            mg: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
+            no3: [M('hanna', 'Hanna Checker'), M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('other', 'Sonstiges')],
+            po4: [M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker (ppm)'), M('hanna_ppb', 'Hanna Checker (ppb)', { conv: 'ppb', inLabel: 'ppb Phosphor', ph: 'z. B. 14' }), M('nyos', 'NYOS'), M('other', 'Sonstiges')],
+            temp: [M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('thermostat', 'Manuelles Thermostat'), M('other', 'Sonstiges')],
+            ph: [M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')]
+        };
+        let methodMemory = (() => { try { const x = JSON.parse(localStorage.getItem('pepeaqua_methods')); return x && typeof x === 'object' ? x : {}; } catch (e) { return {}; } })();
+        function saveMethodMemory() { try { localStorage.setItem('pepeaqua_methods', JSON.stringify(methodMemory)); } catch (e) {} }
+        function methodOf(k, id) { return METHODS[k].find(m => m.id === id) || METHODS[k][0]; }
+
+        function convertRaw(k, mid, rawStr) {
+            const n = parseFloat(String(rawStr).replace(',', '.'));
+            if (!isFinite(n)) return { error: 'Bitte eine Zahl eingeben.' };
+            const m = methodOf(k, mid);
+            if (m.conv === 'syringe') {
+                if (n < 0 || n > 1) return { error: 'Der Spritzenwert muss zwischen 0 und 1 ml liegen.' };
+                const t = SYR[k], pos = n / 0.02, i = Math.min(Math.floor(pos), t.length - 2), f = pos - i;
+                const v = t[i] + (t[i + 1] - t[i]) * f;
+                const d = Math.pow(10, SYR_DEC[k]);
+                return { value: Math.round(v * d) / d, converted: true };
+            }
+            if (m.conv === 'drops') {
+                if (n < 0) return { error: 'Die Tropfenzahl darf nicht negativ sein.' };
+                return { value: Math.round(n * m.factor * 10) / 10, converted: true };
+            }
+            if (m.conv === 'ppb') {
+                if (n < 0) return { error: 'Der Wert darf nicht negativ sein.' };
+                return { value: Math.round(n * 3.066) / 1000, converted: true };
+            }
+            return { value: n, converted: false };
+        }
+
+        const VAL_ROWS = [['kh', 'sal'], ['ca', 'mg'], ['no3', 'po4'], ['temp', 'ph']];
+        function renderValueFields() {
+            const box = document.getElementById('valueFields');
+            if (!box) return;
+            const heim = currentRecordType === 'Heimtest';
+            // vorhandene Eingaben merken
+            const keep = {};
+            Object.keys(thresholds).forEach(k => {
+                const i = document.getElementById('val_' + k), m = document.getElementById('meth_' + k);
+                if (i) keep[k] = { raw: i.value, m: m ? m.value : null };
+            });
+            const field = k => {
+                const cfg = thresholds[k];
+                const mid = (keep[k] && keep[k].m) || methodMemory[k] || METHODS[k][0].id;
+                const m = methodOf(k, mid);
+                const opts = METHODS[k].map(x => `<option value="${x.id}"${x.id === m.id ? ' selected' : ''}>${x.label}</option>`).join('');
+                const ph = heim && m.ph ? m.ph : { kh: 'z. B. 7,5', sal: 'z. B. 35', ca: 'z. B. 420', mg: 'z. B. 1350', no3: 'z. B. 5', po4: 'z. B. 0,04', temp: 'z. B. 25', ph: 'z. B. 8,2' }[k];
+                const lbl = `${cfg.label}${cfg.unit ? ' (' + cfg.unit + ')' : ''}`;
+                return `<div class="form-group">
+                    <label style="color:var(--color-${k})">${lbl}</label>
+                    ${heim ? `<select id="meth_${k}" class="input-styled meth-sel" onchange="onMethodChange('${k}')">${opts}</select>` : ''}
+                    <input type="number" step="any" inputmode="decimal" id="val_${k}" class="input-styled" placeholder="${ph}" value="${keep[k] ? keep[k].raw : ''}" oninput="onRawInput('${k}')">
+                    <div class="val-prev" id="prev_${k}"></div>
+                </div>`;
+            };
+            box.innerHTML = VAL_ROWS.map(r => `<div class="form-row-grid">${r.map(field).join('')}</div>`).join('');
+            Object.keys(thresholds).forEach(k => onRawInput(k));
+        }
+        function onMethodChange(k) {
+            const mid = document.getElementById('meth_' + k).value;
+            methodMemory[k] = mid; saveMethodMemory();
+            const m = methodOf(k, mid), inp = document.getElementById('val_' + k);
+            inp.placeholder = m.ph || { kh: 'z. B. 7,5', sal: 'z. B. 35', ca: 'z. B. 420', mg: 'z. B. 1350', no3: 'z. B. 5', po4: 'z. B. 0,04', temp: 'z. B. 25', ph: 'z. B. 8,2' }[k];
+            onRawInput(k);
+        }
+        function onRawInput(k) {
+            const prev = document.getElementById('prev_' + k), sel = document.getElementById('meth_' + k), inp = document.getElementById('val_' + k);
+            if (!prev) return;
+            if (!sel) { prev.textContent = ''; return; }
+            const m = methodOf(k, sel.value);
+            if (!m.conv) { prev.textContent = ''; prev.classList.remove('err'); return; }
+            if (inp.value === '') { prev.textContent = m.inLabel ? `Eingabe: ${m.inLabel}` : ''; prev.classList.remove('err'); return; }
+            const c = convertRaw(k, sel.value, inp.value);
+            if (c.error) { prev.textContent = c.error; prev.classList.add('err'); return; }
+            prev.classList.remove('err');
+            prev.textContent = `${m.inLabel}: ${inp.value} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
         }
 
         function setRecordType(type) {
@@ -1074,16 +1140,8 @@
             document.getElementById('toggleIcp').classList.toggle('active', type === 'ICP-Analyse');
             
             if(type === 'Heimtest') {
-                procGroup.style.display = 'block';
-                procLabel.innerText = "Testverfahren";
+                procGroup.style.display = 'none';
                 icpGroup.style.display = 'none';
-                procSelect.innerHTML = `
-                    <option value="Tröpfchentest (Salifert)">Tröpfchentest (Salifert)</option>
-                    <option value="Tröpfchentest (Tropic Marin)">Tröpfchentest (Tropic Marin)</option>
-                    <option value="Hanna Photometer">Hanna Photometer</option>
-                    <option value="Refraktometer">Refraktometer</option>
-                    <option value="Digitaler Stift/Sonde">Digitaler Stift/Sonde</option>
-                `;
             } else {
                 procGroup.style.display = 'block';
                 procLabel.innerText = "Labor-ICP Anbieter";
@@ -1096,6 +1154,7 @@
                     <option value="FM ICP-Total">FM ICP-Total</option>
                 `;
             }
+            renderValueFields();
         }
 
         function getStatusColorClass(param, val) {
@@ -1115,25 +1174,36 @@
 
         function saveRecord(e) {
             e.preventDefault();
+            const heim = currentRecordType === 'Heimtest';
+            const values = {}, raw = {}, methods = {};
+            for (const k of Object.keys(thresholds)) {
+                const inp = document.getElementById('val_' + k);
+                const rv = inp.value;
+                if (rv === '') { values[k] = null; continue; }
+                if (heim) {
+                    const mid = document.getElementById('meth_' + k).value;
+                    const c = convertRaw(k, mid, rv);
+                    if (c.error) { alert(thresholds[k].label + ': ' + c.error); inp.focus(); return; }
+                    values[k] = String(c.value);
+                    if (c.converted) raw[k] = rv;
+                    methods[k] = methodOf(k, mid).label;
+                    methodMemory[k] = mid;
+                } else {
+                    values[k] = rv;
+                }
+            }
+            if (heim) saveMethodMemory();
             const record = {
                 id: Date.now(),
                 date: document.getElementById('testDate').value,
                 time: document.getElementById('testTime').value || '',
                 type: currentRecordType,
-                procedure: document.getElementById('testProcedure').value,
+                procedure: heim ? Array.from(new Set(Object.values(methods))).join(', ') : document.getElementById('testProcedure').value,
                 icpUrl: currentRecordType === 'ICP-Analyse' ? document.getElementById('icpUrl').value : '',
                 note: document.getElementById('testNote').value.trim(),
-                values: {
-                    kh: document.getElementById('val_kh').value || null,
-                    sal: document.getElementById('val_sal').value || null,
-                    ca: document.getElementById('val_ca').value || null,
-                    mg: document.getElementById('val_mg').value || null,
-                    no3: document.getElementById('val_no3').value || null,
-                    po4: document.getElementById('val_po4').value || null,
-                    temp: document.getElementById('val_temp').value || null,
-                    ph: document.getElementById('val_ph').value || null
-                }
+                values: values
             };
+            if (heim) { record.methods = methods; if (Object.keys(raw).length) record.raw = raw; }
 
             records.push(record);
             // Sort records chronologically
@@ -1141,6 +1211,7 @@
             localStorage.setItem('pepeaqua_records', JSON.stringify(records));
             
             document.getElementById('waterTestForm').reset();
+            renderValueFields();
             setFormNow();
             
             renderDashboard();
@@ -1440,21 +1511,49 @@
             }).join('');
         }
 
-        // ===== Countdown =====
-        let tm = { state: 'idle', total: 0, end: 0, left: 0 };
+        // ===== Countdown (bis zu 3 Timer gleichzeitig) =====
+        const TM_N = 3;
+        let tms = Array.from({ length: TM_N }, () => ({ state: 'idle', total: 0, end: 0, left: 0 }));
         let tmTimer = null, tmAudio = null, tmWake = null;
-        function tmSave() { try { localStorage.setItem('pepeaqua_timer', JSON.stringify(tm)); } catch (e) {} }
+        function tmSave() { try { localStorage.setItem('pepeaqua_timer', JSON.stringify(tms)); } catch (e) {} }
         function tmFmt(ms) {
             const t = Math.max(0, Math.ceil(ms / 1000));
             return pad2(Math.floor(t / 60)) + ':' + pad2(t % 60);
         }
+        function tmCardHtml(i) {
+            return `<div class="glass-panel timer-panel" id="timerPanel${i}" style="display:none;">
+                <div class="tm-top"><span class="tm-title" id="tmTitle${i}">⏱️ Countdown</span><span class="tm-display" id="tmDisplay${i}">00:00</span></div>
+                <div class="tm-presets">
+                    <button type="button" onclick="tmStart(${i}, 60)">1 Min</button>
+                    <button type="button" onclick="tmStart(${i}, 180)">3 Min</button>
+                    <button type="button" onclick="tmStart(${i}, 300)">5 Min</button>
+                    <button type="button" onclick="tmStart(${i}, 420)">7 Min</button>
+                </div>
+                <div class="tm-custom">
+                    <input type="number" id="tmMin${i}" class="input-styled" min="0" max="999" inputmode="numeric" placeholder="Min">
+                    <span>:</span>
+                    <input type="number" id="tmSec${i}" class="input-styled" min="0" max="59" inputmode="numeric" placeholder="Sek">
+                    <button type="button" class="tm-main" id="tmMain${i}" onclick="tmMainClick(${i})">▶ Start</button>
+                    <button type="button" onclick="tmReset(${i})">↺</button>
+                </div>
+            </div>`;
+        }
+        function tmAny(st) { return tms.some(t => t.state === st); }
         function tmInit() {
-            try { const x = JSON.parse(localStorage.getItem('pepeaqua_timer')); if (x && typeof x === 'object') tm = Object.assign(tm, x); } catch (e) {}
-            if (tm.state === 'run') { if (tm.end - Date.now() <= 0) tm.state = 'done'; else tmEnsureTick(); }
-            if (tm.state === 'done') tm.left = 0;
+            document.getElementById('timerBox').innerHTML = tms.map((_, i) => tmCardHtml(i)).join('');
+            try {
+                const x = JSON.parse(localStorage.getItem('pepeaqua_timer'));
+                if (Array.isArray(x)) x.slice(0, TM_N).forEach((t, i) => { if (t && typeof t === 'object') Object.assign(tms[i], t); });
+                else if (x && typeof x === 'object') Object.assign(tms[0], x);
+            } catch (e) {}
+            tms.forEach(t => {
+                if (t.state === 'run' && t.end - Date.now() <= 0) t.state = 'done';
+                if (t.state === 'done') t.left = 0;
+            });
+            if (tmAny('run')) tmEnsureTick();
             tmRender();
             document.addEventListener('visibilitychange', () => { if (!document.hidden) tmTick(); });
-            document.addEventListener('pointerdown', () => { if (tm.state === 'run') tmUnlock(); }, { passive: true });
+            document.addEventListener('pointerdown', () => { if (tmAny('run')) tmUnlock(); }, { passive: true });
         }
         // Alarmton als Audio-Element (läuft auf dem iPhone auch bei Stumm-Schalter) und als Endlosschleife bis zum Beenden
         let tmEl = null, tmLoop = null, tmAlarmUrl = null, tmSilentUrl = null;
@@ -1537,66 +1636,77 @@
             try { if (tmEl) { delete tmEl.dataset.on; tmEl.pause(); tmEl.loop = false; tmEl.src = tmSilentUrl; } } catch (e) {}
             if (tmLoop) { clearInterval(tmLoop); tmLoop = null; }
         }
-        function tmWakeOn() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { tmWake = l; }).catch(() => {}); } catch (e) {} }
+        function tmWakeOn() { try { if (navigator.wakeLock && !tmWake) navigator.wakeLock.request('screen').then(l => { tmWake = l; }).catch(() => {}); } catch (e) {} }
         function tmWakeOff() { try { if (tmWake) { tmWake.release(); tmWake = null; } } catch (e) {} }
         function tmEnsureTick() { if (!tmTimer) tmTimer = setInterval(tmTick, 250); }
+        function tmSync() {
+            if (!tmAny('done')) tmAlarmStop();
+            if (tmAny('run')) tmWakeOn(); else { tmWakeOff(); clearInterval(tmTimer); tmTimer = null; }
+            tmSave(); tmRender();
+        }
         function tmTick() {
-            if (tm.state === 'run') {
-                tm.left = tm.end - Date.now();
-                if (tm.left <= 0) tmFinish();
-            }
+            tms.forEach((t, i) => {
+                if (t.state === 'run') { t.left = t.end - Date.now(); if (t.left <= 0) tmFinish(i); }
+            });
+            if (!tmAny('run')) { clearInterval(tmTimer); tmTimer = null; tmWakeOff(); }
             tmRender();
         }
-        function tmFinish() {
-            tm.state = 'done'; tm.left = 0;
-            clearInterval(tmTimer); tmTimer = null;
-            tmWakeOff(); tmSave();
-            tmAlarmStart();
+        function tmFinish(i) {
+            const t = tms[i];
+            t.state = 'done'; t.left = 0;
+            tmSave();
+            if (!(tmEl && tmEl.dataset.on) && !tmLoop) tmAlarmStart();
             try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
-            const panel = document.getElementById('timerPanel');
-            if (panel && !panel.offsetParent) document.getElementById('tmToast').style.display = 'block';
+            const box = document.getElementById('timerBox');
+            if (box && !box.offsetParent) document.getElementById('tmToast').style.display = 'block';
         }
         function tmRender() {
-            const disp = document.getElementById('tmDisplay'); if (!disp) return;
-            const ms = tm.state === 'run' ? Math.max(0, tm.end - Date.now()) : (tm.state === 'pause' ? tm.left : (tm.state === 'done' ? 0 : tm.total));
-            disp.textContent = tmFmt(ms);
-            const panel = document.getElementById('timerPanel');
-            panel.classList.toggle('run', tm.state === 'run');
-            panel.classList.toggle('done', tm.state === 'done');
-            document.getElementById('tmMain').textContent = { idle: '▶ Start', run: '⏸ Pause', pause: '▶ Weiter', done: '⏹ Beenden' }[tm.state];
-            if (tm.state !== 'done') document.getElementById('tmToast').style.display = 'none';
+            if (!document.getElementById('timerBox')) return;
+            let shown = 0;
+            const vis = tms.map((t, i) => i === 0 || t.state !== 'idle' || tms[i - 1].state !== 'idle');
+            vis.forEach(v => { if (v) shown++; });
+            tms.forEach((t, i) => {
+                const panel = document.getElementById('timerPanel' + i);
+                panel.style.display = vis[i] ? '' : 'none';
+                const ms = t.state === 'run' ? Math.max(0, t.end - Date.now()) : (t.state === 'pause' ? t.left : (t.state === 'done' ? 0 : t.total));
+                document.getElementById('tmDisplay' + i).textContent = tmFmt(ms);
+                document.getElementById('tmTitle' + i).textContent = shown > 1 ? `⏱️ Countdown ${i + 1}` : '⏱️ Countdown';
+                panel.classList.toggle('run', t.state === 'run');
+                panel.classList.toggle('done', t.state === 'done');
+                document.getElementById('tmMain' + i).textContent = { idle: '▶ Start', run: '⏸ Pause', pause: '▶ Weiter', done: '⏹ Beenden' }[t.state];
+            });
+            const box = document.getElementById('timerBox');
+            document.getElementById('tmToast').style.display = (tmAny('done') && !box.offsetParent) ? 'block' : 'none';
         }
-        function tmStart(sec) {
+        function tmStart(i, sec) {
             if (!(sec > 0)) return;
-            tmAlarmStop();
             tmUnlock();
-            tm = { state: 'run', total: sec * 1000, end: Date.now() + sec * 1000, left: sec * 1000 };
-            tmEnsureTick(); tmWakeOn(); tmSave(); tmRender();
+            tms[i] = { state: 'run', total: sec * 1000, end: Date.now() + sec * 1000, left: sec * 1000 };
+            tmEnsureTick(); tmSync();
         }
-        function tmMainClick() {
+        function tmMainClick(i) {
             tmUnlock();
-            if (tm.state === 'run') {
-                tm.left = Math.max(0, tm.end - Date.now()); tm.state = 'pause';
-                clearInterval(tmTimer); tmTimer = null; tmWakeOff();
-            } else if (tm.state === 'pause') {
-                tm.end = Date.now() + tm.left; tm.state = 'run'; tmEnsureTick(); tmWakeOn();
-            } else if (tm.state === 'done') {
-                tmReset(); return;
+            const t = tms[i];
+            if (t.state === 'run') {
+                t.left = Math.max(0, t.end - Date.now()); t.state = 'pause';
+            } else if (t.state === 'pause') {
+                t.end = Date.now() + t.left; t.state = 'run'; tmEnsureTick();
+            } else if (t.state === 'done') {
+                tmReset(i); return;
             } else {
-                const m = parseFloat(document.getElementById('tmMin').value) || 0;
-                const sc = parseFloat(document.getElementById('tmSec').value) || 0;
+                const m = parseFloat(document.getElementById('tmMin' + i).value) || 0;
+                const sc = parseFloat(document.getElementById('tmSec' + i).value) || 0;
                 const sec = Math.round(m * 60 + sc);
-                tmStart(sec > 0 ? sec : Math.round(tm.total / 1000));
+                tmStart(i, sec > 0 ? sec : Math.round(t.total / 1000));
                 return;
             }
-            tmSave(); tmRender();
+            tmSync();
         }
-        function tmReset() {
-            tm = { state: 'idle', total: tm.total, end: 0, left: 0 };
-            clearInterval(tmTimer); tmTimer = null; tmWakeOff(); tmAlarmStop();
-            document.getElementById('tmToast').style.display = 'none';
-            tmSave(); tmRender();
+        function tmReset(i) {
+            tms[i] = { state: 'idle', total: tms[i].total, end: 0, left: 0 };
+            tmSync();
         }
+        function tmDismissAll() { tms.forEach((t, i) => { if (t.state === 'done') tms[i] = { state: 'idle', total: t.total, end: 0, left: 0 }; }); tmSync(); }
 
         const KB = {
             sal: {
@@ -1638,14 +1748,14 @@
         const KB_PLUS = {
             sal: {
                 low: { plus: [
-                    'Refraktometer vor dem Messen mit 35-psu-Kalibrierlösung prüfen und die Temperaturkompensation beachten. Ein ungenaues Messgerät ist die häufigste Ursache für scheinbar falsche Salinität.',
+                    'Refraktometer vor dem Messen mit 35-psu-Kalibrierlösung prüfen und die Temperaturkompensation beachten. Ein ungenaues Messgerät ist die häufigste Ursache für scheinbar falschen Salzgehalt.',
                     'Nachfüllwasser und Nachfüllautomat prüfen: Läuft zu viel Osmosewasser nach (Schwimmerschalter, Pumpe, Schlauch)?',
-                    'Wasserwechsel nur mit Salzwasser, dessen Salinität du vorher selbst gemessen hast. Das Salz vor dem Einsatz mehrere Stunden umwälzen, bis es vollständig gelöst ist.',
-                    'Die Salinität möglichst gleichmäßig halten. Tägliche Schwankungen von mehr als etwa 1 psu belasten Korallen mehr als ein leicht abweichender, aber stabiler Wert.'
+                    'Wasserwechsel nur mit Salzwasser, dessen Salzgehalt du vorher selbst gemessen hast. Das Salz vor dem Einsatz mehrere Stunden umwälzen, bis es vollständig gelöst ist.',
+                    'Den Salzgehalt möglichst gleichmäßig halten. Tägliche Schwankungen von mehr als etwa 1 psu belasten Korallen mehr als ein leicht abweichender, aber stabiler Wert.'
                 ], warn: 'Nie schnell korrigieren: höchstens 1 psu pro Tag anheben, sonst entsteht osmotischer Stress.' },
                 high: { plus: [
                     'Verdunstung ersetzen: Nur Osmosewasser nachfüllen, niemals Salzwasser. Nachfüllautomat und Vorratsbehälter prüfen.',
-                    'Abdeckung, Raumluft und Lüfter beachten: Starke Verdunstung (Ventilator, trockene Heizungsluft) lässt die Salinität schleichend steigen.',
+                    'Abdeckung, Raumluft und Lüfter beachten: Starke Verdunstung (Ventilator, trockene Heizungsluft) lässt den Salzgehalt schleichend steigen.',
                     'Messgerät kalibrieren und mit einer zweiten Messung gegenprüfen, bevor du Wasser tauschst.',
                     'Ein Teilwasserwechsel mit Osmosewasser oder schwächerem Salzwasser senkt den Wert, jeweils nur etwa 1 psu pro Tag.'
                 ], warn: 'Nicht auf einmal stark absenken. Fische und Wirbellose reagieren empfindlich auf schnelle Änderungen.' }
@@ -1730,7 +1840,7 @@
                     'Ventilator, Lüfter oder Kühler einsetzen und die Beleuchtung dimmen oder kürzer laufen lassen.',
                     'Abwärme von Pumpen, Beleuchtung und Technik reduzieren, Abdeckung öffnen und den Raum kühlen.',
                     'Heizer und Thermostat prüfen: Klemmt der Heizer, steigt die Temperatur dauerhaft.',
-                    'Achte bei höherer Temperatur auf die Salinität, weil durch Verdunstung mehr Wasser fehlt und der Salzgehalt steigt.'
+                    'Achte bei höherer Temperatur auf den Salzgehalt, weil durch Verdunstung mehr Wasser fehlt und der Salzgehalt steigt.'
                 ], warn: 'Dauerhaft über etwa 28 °C steigt das Risiko für Korallenbleiche deutlich. Höher als 30 °C ist akut gefährlich.' }
             },
             ph: {
@@ -1870,8 +1980,8 @@
             if (lo('ph') && L.kh !== undefined && !lo('kh')) out.push({ p: ['ph'], level: 'info', text: 'Die KH passt, der pH ist aber niedrig. Das liegt eher an CO₂-reicher Raumluft: lüften und den Abschäumer mit Frischluft von draußen betreiben.' });
             if (hi('temp')) out.push({ p: ['temp', 'kh', 'ca'], level: 'info', text: 'Eine höhere Temperatur steigert den Verbrauch an Calcium und KH und senkt den Sauerstoffgehalt.' });
             const others = ['kh', 'ca', 'mg', 'no3', 'po4'];
-            if (hi('sal') && others.filter(hi).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Die Salinität und mehrere weitere Werte sind zu hoch. Das ist typisch bei Verdunstung (alles wird aufkonzentriert). Zuerst die Salinität korrigieren und dann neu messen, bevor andere Werte „korrigiert“ werden.' });
-            if (lo('sal') && others.filter(lo).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Die Salinität und mehrere weitere Werte sind zu niedrig. Das spricht für Verdünnung. Zuerst die Salinität korrigieren und dann neu messen.' });
+            if (hi('sal') && others.filter(hi).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Der Salzgehalt und mehrere weitere Werte sind zu hoch. Das ist typisch bei Verdunstung (alles wird aufkonzentriert). Zuerst den Salzgehalt korrigieren und dann neu messen, bevor andere Werte „korrigiert“ werden.' });
+            if (lo('sal') && others.filter(lo).length >= 2) out.push({ p: ['sal'], level: 'warn', text: 'Der Salzgehalt und mehrere weitere Werte sind zu niedrig. Das spricht für Verdünnung. Zuerst den Salzgehalt korrigieren und dann neu messen.' });
             return out;
         }
 
@@ -1902,7 +2012,7 @@
 
         // Tagesdosis: Anpassung der eigenen Erhaltungsdosis um 15 % (üblicher Richtwert, danach nachmessen)
         const DAILY_PCT = 0.15;
-        const DAILY_PARAMS = ['kh', 'ca', 'no3', 'po4'];
+        const DAILY_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
         function hasDaily(k, slot) { const p = appSettings.products[k + '_' + slot]; return !!(p && p.name && p.daily > 0); }
         function dailyAdvice(it) {
             const k = it.k, cfg = thresholds[k], V = appSettings.volume;
@@ -2051,6 +2161,129 @@
                 if (n > 0) p[field] = n; else delete p[field];
             }
             saveSettings();
+            if (field === 'daily') { logDose(slot, p.daily || 0); renderDoseChart(); }
+        }
+
+        // ===== Dosierverlauf =====
+        let dosingLog = (() => { try { const x = JSON.parse(localStorage.getItem('pepeaqua_dosing')); return Array.isArray(x) ? x : []; } catch (e) { return []; } })();
+        function saveDosing() { try { localStorage.setItem('pepeaqua_dosing', JSON.stringify(dosingLog)); } catch (e) {} }
+        const DOSE_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
+        let doseRange = 30, doseSel = new Set(DOSE_PARAMS);
+        function logDose(slot, v) {
+            const last = dosingLog.filter(e => e.slot === slot).sort((a, b) => a.ts - b.ts).pop();
+            if (last ? last.v === v : v === 0) return;
+            dosingLog.push({ ts: Date.now(), slot, v });
+            saveDosing();
+        }
+        function seedDosing() {
+            let ch = false;
+            DOSE_PARAMS.forEach(k => {
+                const slot = k + '_up', p = appSettings.products && appSettings.products[slot];
+                if (p && p.daily > 0 && !dosingLog.some(e => e.slot === slot)) { dosingLog.push({ ts: Date.now(), slot, v: p.daily }); ch = true; }
+            });
+            if (ch) saveDosing();
+        }
+        function setDoseRange(d) { doseRange = d; renderDoseChart(); }
+        function toggleDoseParam(k) { if (doseSel.has(k)) doseSel.delete(k); else doseSel.add(k); renderDoseChart(); }
+        function doseEvents(k) { return dosingLog.filter(e => e.slot === k + '_up').sort((a, b) => a.ts - b.ts); }
+        function doseValueAt(k, ts) { let v = null; doseEvents(k).forEach(e => { if (e.ts <= ts) v = e.v; }); return v; }
+        function doseUnit(k) { const p = appSettings.products && appSettings.products[k + '_up']; return (p && p.unit) || 'ml'; }
+        function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
+
+        function renderDoseChart() {
+            const cv = document.getElementById('doseCanvas');
+            if (!cv) return;
+            document.querySelectorAll('.dose-range-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.days) === doseRange));
+            document.getElementById('doseChips').innerHTML = DOSE_PARAMS.map(k => {
+                const on = doseSel.has(k), c = paramColors[k];
+                return `<button type="button" class="chip${on ? ' active' : ''}" style="--c:${c};--cbg:${c}26" aria-pressed="${on}" onclick="toggleDoseParam('${k}')">${thresholds[k].label}</button>`;
+            }).join('');
+            // Liste der Einträge
+            const rows = dosingLog.map((e, i) => ({ e, i })).sort((a, b) => b.e.ts - a.e.ts);
+            document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
+                const k = e.slot.split('_')[0], d = new Date(e.ts);
+                const p = appSettings.products[e.slot] || {};
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())} · ${e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung'}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+            }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
+
+            const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
+            if (!W) return;
+            const dpr = window.devicePixelRatio || 1;
+            cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+            cv.style.width = W + 'px'; cv.style.height = H + 'px';
+            const ctx = cv.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, W, H);
+            const to = Date.now(), from = to - doseRange * DAY_MS;
+            const series = [];
+            DOSE_PARAMS.forEach(k => {
+                if (!doseSel.has(k)) return;
+                const ev = doseEvents(k); if (!ev.length) return;
+                let pts = [], before = null;
+                ev.forEach(e => { if (e.ts <= from) before = e; });
+                if (before) pts.push({ ts: from, v: before.v });
+                ev.forEach(e => { if (e.ts > from && e.ts <= to) pts.push({ ts: e.ts, v: e.v }); });
+                if (pts.length) series.push({ k, pts, max: Math.max(...pts.map(q => q.v), 0.000001) });
+            });
+            document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
+            document.getElementById('doseHint').textContent = series.length
+                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert.')
+                : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis ein, dann entsteht hier dein Verlauf.';
+            doseLayout = null;
+            if (!series.length) return;
+            const L = 44, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+            const single = series.length === 1;
+            const ymax = single ? niceMax(series[0].max * 1.15) : 100;
+            const X = ts => L + (ts - from) / (to - from) * pw;
+            const Y = v => T + ph - (single ? v / ymax : v / 1) * ph;
+            ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const yy = T + ph - i / 4 * ph;
+                ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke();
+                const val = ymax * i / 4;
+                ctx.textAlign = 'right';
+                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) : Math.round(val) + ' %', L - 6, yy);
+            }
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            for (let i = 0; i <= 3; i++) {
+                const ts = from + (to - from) * i / 3, d = new Date(ts);
+                const lbl = doseRange > 100 ? d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }) : `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.`;
+                ctx.fillText(lbl, Math.min(Math.max(X(ts), L + 14), W - R - 14), H - B + 6);
+            }
+            series.forEach(sr => {
+                const col = paramColors[sr.k];
+                const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+                ctx.beginPath();
+                sr.pts.forEach((q, i) => {
+                    const x = X(q.ts), y = yv(q.v);
+                    if (i === 0) ctx.moveTo(x, y); else { ctx.lineTo(x, yv(sr.pts[i - 1].v)); ctx.lineTo(x, y); }
+                });
+                const last = sr.pts[sr.pts.length - 1];
+                ctx.lineTo(X(to), yv(last.v));
+                ctx.stroke();
+                ctx.fillStyle = col;
+                sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 3, 0, Math.PI * 2); ctx.fill(); });
+            });
+            doseLayout = { from, to, L, R, W };
+        }
+        let doseLayout = null;
+        function niceMax(v) {
+            const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e;
+            return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e;
+        }
+        function doseTap(ev) {
+            if (!doseLayout) return;
+            const r = ev.currentTarget.getBoundingClientRect(), x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+            const { from, to, L, R, W } = doseLayout;
+            const ts = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+            const d = new Date(ts);
+            const parts = DOSE_PARAMS.filter(k => doseSel.has(k)).map(k => {
+                const v = doseValueAt(k, ts);
+                return v === null ? null : `${thresholds[k].label}: ${v > 0 ? fmtNum(v) + ' ' + doseUnit(k) : 'keine Dosierung'}`;
+            }).filter(Boolean);
+            document.getElementById('doseHint').textContent = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} – ${parts.length ? parts.join(' · ') : 'noch keine Dosierung erfasst'}`;
         }
 
         function renderProductSettings() {
@@ -2347,7 +2580,7 @@
         }
 
         // ===== Datensicherung =====
-        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds'];
+        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds', 'pepeaqua_methods', 'pepeaqua_dosing'];
 
         function buildBackup() {
             const data = {};
