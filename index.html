@@ -1455,7 +1455,7 @@
             document.addEventListener('pointerdown', () => { if (tm.state === 'run') tmUnlock(); }, { passive: true });
         }
         // Alarmton als Audio-Element (läuft auf dem iPhone auch bei Stumm-Schalter) und als Endlosschleife bis zum Beenden
-        let tmEl = null, tmLoop = null;
+        let tmEl = null, tmLoop = null, tmAlarmUrl = null, tmSilentUrl = null;
         function tmMakeWav() {
             const sr = 22050, n = Math.floor(sr * 3.4), lead = 0.8;
             const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
@@ -1475,12 +1475,23 @@
             }
             return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
         }
+        function tmMakeSilentWav() {
+            const sr = 8000, n = sr / 2;
+            const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+            const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+            w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+            v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+            v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+            w(36, 'data'); v.setUint32(40, n * 2, true);
+            return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+        }
         function tmUnlock() {
             try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
             try {
-                if (!tmEl) { tmEl = new Audio(tmMakeWav()); tmEl.loop = true; tmEl.preload = 'auto'; }
+                if (!tmAlarmUrl) { tmAlarmUrl = tmMakeWav(); tmSilentUrl = tmMakeSilentWav(); }
+                if (!tmEl) { tmEl = new Audio(tmSilentUrl); tmEl.preload = 'auto'; }
                 if (tmEl.paused && !tmEl.dataset.on) {
-                    tmEl.muted = true; tmEl.volume = 0; tmEl.currentTime = 0;
+                    tmEl.loop = false; tmEl.src = tmSilentUrl; tmEl.muted = true; tmEl.volume = 0;
                     const pr = tmEl.play();
                     if (pr && pr.then) pr.then(() => { if (!tmEl.dataset.on) { tmEl.pause(); tmEl.currentTime = 0; } tmEl.muted = false; tmEl.volume = 1; }).catch(() => { tmEl.muted = false; tmEl.volume = 1; });
                 }
@@ -1512,7 +1523,7 @@
             let ok = false;
             try {
                 if (tmEl) {
-                    tmEl.dataset.on = '1'; tmEl.muted = false; tmEl.volume = 1; tmEl.currentTime = 0.8;
+                    tmEl.dataset.on = '1'; tmEl.muted = false; tmEl.volume = 1; tmEl.loop = true; tmEl.src = tmAlarmUrl;
                     const pr = tmEl.play();
                     if (pr && pr.catch) pr.catch(() => { delete tmEl.dataset.on; tmChime(); tmLoop = setInterval(tmChime, 2600); });
                     ok = true;
@@ -1521,7 +1532,7 @@
             if (!ok) { tmChime(); tmLoop = setInterval(tmChime, 2600); }
         }
         function tmAlarmStop() {
-            try { if (tmEl) { delete tmEl.dataset.on; tmEl.pause(); tmEl.currentTime = 0; } } catch (e) {}
+            try { if (tmEl) { delete tmEl.dataset.on; tmEl.pause(); tmEl.loop = false; tmEl.src = tmSilentUrl; } } catch (e) {}
             if (tmLoop) { clearInterval(tmLoop); tmLoop = null; }
         }
         function tmWakeOn() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { tmWake = l; }).catch(() => {}); } catch (e) {} }
