@@ -505,6 +505,8 @@
         }
         .rec-warn { border-left: 3px solid #f6d365; background: rgba(246, 211, 101, 0.08); }
         .rec-info { border-left: 3px solid rgba(79, 227, 238, 0.7); background: rgba(79, 227, 238, 0.07); }
+        .rec-plus { margin: 6px 0 4px 18px; font-size: 0.88rem; }
+        .rec-plus li { margin-bottom: 6px; }
         .rec-steps { margin: 6px 0 4px 18px; }
         .rec-steps li { margin-bottom: 6px; }
         .rec-link { color: #4fe3ee; text-decoration: underline; cursor: pointer; }
@@ -1429,8 +1431,8 @@
                     <div class="thr-grid">
                         ${fld(k, 'minOpt', 'Soll von', e.minOpt, '')}
                         ${fld(k, 'maxOpt', 'Soll bis', e.maxOpt, '')}
-                        ${fld(k, 'trigLow', 'Dosieren ab (oder darunter)', ex.trigLow !== undefined || DEFAULT_TRIG.low[k] !== undefined ? e.trigLow : undefined, 'unter Soll')}
-                        ${fld(k, 'trigHigh', 'Senken ab (oder darüber)', ex.trigHigh !== undefined || DEFAULT_TRIG.high[k] !== undefined ? e.trigHigh : undefined, 'über Soll')}
+                        ${k === 'ph' ? '' : fld(k, 'trigLow', (k === 'temp' || k === 'sal') ? 'Erhöhen ab (oder darunter)' : 'Dosieren ab (oder darunter)', ex.trigLow !== undefined || DEFAULT_TRIG.low[k] !== undefined ? e.trigLow : undefined, 'unter Soll')}
+                        ${k === 'ph' ? '' : fld(k, 'trigHigh', 'Senken ab (oder darüber)', ex.trigHigh !== undefined || DEFAULT_TRIG.high[k] !== undefined ? e.trigHigh : undefined, 'über Soll')}
                         ${fld(k, 'target', 'Zielwert', e.target !== undefined ? e.target : undefined, 'Mitte: ' + fmtNum((e.minOpt + e.maxOpt) / 2))}
                     </div>
                     ${thrErr[k] ? `<div class="thr-err">⚠️ ${thrErr[k]} Die Änderung wurde nicht übernommen.</div>` : ''}
@@ -1630,6 +1632,124 @@
                 high: { ein: 'Ein hoher pH-Wert kommt meist von Kalkwasser oder sehr hoher KH oder ist der Tageshöchstwert.', ursache: 'Zu schnelle Kalkwasser- oder KH-Dosierung, Messung zur Tageszeit mit natürlichem Höchstwert.', massn: 'Dosierung drosseln und immer zur gleichen Tageszeit messen, da der pH im Tagesverlauf schwankt.' }
             }
         };
+
+
+        // Zusätzliche, ausführlichere Hinweise je Parameter (allgemeine Faustwerte der Riffaquaristik)
+        const KB_PLUS = {
+            sal: {
+                low: { plus: [
+                    'Refraktometer vor dem Messen mit 35-psu-Kalibrierlösung prüfen und die Temperaturkompensation beachten. Ein ungenaues Messgerät ist die häufigste Ursache für scheinbar falsche Salinität.',
+                    'Nachfüllwasser und Nachfüllautomat prüfen: Läuft zu viel Osmosewasser nach (Schwimmerschalter, Pumpe, Schlauch)?',
+                    'Wasserwechsel nur mit Salzwasser, dessen Salinität du vorher selbst gemessen hast. Das Salz vor dem Einsatz mehrere Stunden umwälzen, bis es vollständig gelöst ist.',
+                    'Die Salinität möglichst gleichmäßig halten. Tägliche Schwankungen von mehr als etwa 1 psu belasten Korallen mehr als ein leicht abweichender, aber stabiler Wert.'
+                ], warn: 'Nie schnell korrigieren: höchstens 1 psu pro Tag anheben, sonst entsteht osmotischer Stress.' },
+                high: { plus: [
+                    'Verdunstung ersetzen: Nur Osmosewasser nachfüllen, niemals Salzwasser. Nachfüllautomat und Vorratsbehälter prüfen.',
+                    'Abdeckung, Raumluft und Lüfter beachten: Starke Verdunstung (Ventilator, trockene Heizungsluft) lässt die Salinität schleichend steigen.',
+                    'Messgerät kalibrieren und mit einer zweiten Messung gegenprüfen, bevor du Wasser tauschst.',
+                    'Ein Teilwasserwechsel mit Osmosewasser oder schwächerem Salzwasser senkt den Wert, jeweils nur etwa 1 psu pro Tag.'
+                ], warn: 'Nicht auf einmal stark absenken. Fische und Wirbellose reagieren empfindlich auf schnelle Änderungen.' }
+            },
+            kh: {
+                low: { plus: [
+                    'Zuerst Magnesium prüfen: Liegt es unter dem Sollbereich, fällt zugegebenes Calcium und Karbonat leichter aus und die KH lässt sich schlecht halten.',
+                    'Calcium und KH werden von Korallen im Verhältnis von etwa 7,15 mg/l Calcium zu 1 dKH verbraucht. Dosiere beide ungefähr im selben Verhältnis, damit sie sich nicht auseinanderentwickeln.',
+                    'Die Erhaltungsdosis (Tagesdosis) an den echten Verbrauch anpassen. Führe dazu zwei Messungen im Abstand von 24 Stunden durch und beobachte den Abfall pro Tag.',
+                    'Bei einem Kalkreaktor oder Kalkwasser: Die KH-Zufuhr und das Calcium laufen dann automatisch mit. Prüfe in diesem Fall Reaktor, CO₂-Zufuhr und Auslaufwert.'
+                ], warn: 'Nicht mehr als etwa 1 dKH pro Tag anheben. Eine stabile KH ist wichtiger als der exakte Wert. Starke Schwankungen schädigen Korallen mehr als ein etwas niedriger, aber konstanter Wert.' },
+                high: { plus: [
+                    'Dosierung pausieren und die KH nur langsam durch den normalen Verbrauch absinken lassen.',
+                    'Neuwasser prüfen: Manche Salzmischungen haben eine hohe KH. Gegebenenfalls mit weniger KH-reichem Salz mischen oder Wasserwechsel vorsichtig dosieren.',
+                    'Bei hoher KH zusammen mit hohem Calcium Pumpen und Heizer auf weißen Kalkstaub prüfen (Zeichen von Ausfällung).',
+                    'Teststreifen oder Tropfentest mit einem zweiten Test gegenprüfen. Ein abweichender Wert kann auch an einem alten Testset liegen.'
+                ], warn: 'Hohe KH-Werte, besonders ein schneller Anstieg, können bei SPS-Korallen zu verbrannten Spitzen (Gewebeschäden) führen.' }
+            },
+            ca: {
+                low: { plus: [
+                    'Magnesium prüfen: Es sollte rund dreimal so hoch wie Calcium liegen, sonst bleibt Calcium schlecht gelöst.',
+                    'Prüfe, ob die KH in dem gleichen Maß fällt. Sinken beide gemeinsam, ist der Verbrauch höher als deine Tagesdosis. Dann Tagesdosis von Calcium und KH erhöhen.',
+                    'Calcium und KH-Produkt nicht an derselben Stelle gleichzeitig ins Becken geben. Mit etwas Abstand und in kleinen Mengen dosieren.',
+                    'Bei einem Kalkreaktor den Auslaufwert (KH) und die CO₂-Menge prüfen. Ein verbrauchtes Kalkgranulat liefert zu wenig Calcium.'
+                ], warn: 'Nicht mehr als etwa 20 mg/l pro Tag anheben, jeden Schritt nachmessen.' },
+                high: { plus: [
+                    'Dosierung pausieren und den Wert über den Verbrauch sinken lassen. Bei starker Überhöhung einen Teilwasserwechsel mit calciumärmerem Salz in Betracht ziehen.',
+                    'Neuwasser prüfen: Manche Salzmischungen liegen bereits sehr hoch und treiben den Wert bei jedem Wasserwechsel nach oben.',
+                    'KH mit im Blick behalten. Hohes Calcium zusammen mit hoher KH führt am ehesten zu Ausfällungen.',
+                    'Testset mit einem zweiten Test oder Referenzlösung prüfen, falls der Wert plötzlich ungewöhnlich hoch ist.'
+                ], warn: 'Calcium und KH nie gleichzeitig stark anheben. Das begünstigt Ausfällung und trübt das Wasser.' }
+            },
+            mg: {
+                low: { plus: [
+                    'Magnesium vor Calcium und KH anheben. Ist Magnesium zu niedrig, bleiben die beiden anderen schlecht im Becken gelöst.',
+                    'Verbrauch durch Kalkalgen und Korallen berücksichtigen: Bei vielen Kalkalgen sinkt Magnesium schneller als erwartet.',
+                    'Prüfe das Salz: Manche Mischungen haben von Natur aus wenig Magnesium. Dann hilft eine dauerhafte Erhaltungsdosis.',
+                    'Magnesium über mehrere Tage verteilt zugeben und zwischendurch nachmessen.'
+                ], warn: 'Nicht mehr als etwa 100 mg/l pro Tag anheben.' },
+                high: { plus: [
+                    'Magnesium-Dosierung pausieren und den Wert durch normale Wasserwechsel langsam senken.',
+                    'Den Wert mit einem zweiten Test gegenprüfen, Magnesiumtests sind oft ungenau.',
+                    'Calcium und KH im Blick behalten, denn bei hohem Magnesium wird die Kalkbildung der Korallen teilweise gestört.'
+                ], warn: 'Ein hoher Magnesiumwert ist selten gefährlich. Es gibt keinen Grund für schnelle Korrekturen.' }
+            },
+            no3: {
+                low: { plus: [
+                    'Füttern und Nährstoffeintrag prüfen: Sehr wenig Futter bei starkem Export (Abschäumer, Kohle, GFO) lässt Nitrat gegen null sinken.',
+                    'Abschäumer weniger aggressiv einstellen und Kohle sowie Phosphat-Adsorber vorübergehend pausieren.',
+                    'Ein wenig Nitrat (um die 2 bis 5 mg/l) schützt Korallen vor Hunger. Farbverlust und blasse Korallen sind ein typisches Zeichen.',
+                    'Wenn du ein Nitrat-Produkt benutzt: kleine Schritte, Phosphat dabei im Blick behalten, damit beide im Gleichgewicht bleiben.'
+                ], warn: 'Nitrat und Phosphat gleichzeitig sehr niedrig begünstigen Cyanobakterien und Dinoflagellaten. Nicht beide gleichzeitig auf null drücken.' },
+                high: { plus: [
+                    'Fütterung prüfen: Zu viel Futter ist die häufigste Nitratquelle. Futter vor dem Eintrag kurz spülen und nur so viel geben, wie in wenigen Minuten gefressen wird.',
+                    'Mulm absaugen, Filtermaterial (Filtermatten, Schwämme) regelmäßig reinigen und den Abschäumer sauber halten.',
+                    'Nitratabbau fördern: Wasserwechsel, Makroalgen im Technikbecken, ausreichend Abschäumerleistung oder Kohlenstoffdosierung nach Herstellerangabe.',
+                    'Nur langsam senken, etwa 30 % pro Schritt. Zu schnelle Änderungen stressen empfindliche Korallen.'
+                ], warn: 'Hohes Nitrat bei sehr niedrigem Phosphat macht Korallen anfälliger für Bleiche. Phosphat nicht gleichzeitig absenken.' }
+            },
+            po4: {
+                low: { plus: [
+                    'Phosphat-Adsorber (GFO), Kohle und Kohlenstoffdosierung vorübergehend pausieren, bis der Wert wieder steigt.',
+                    'Mehr oder nährstoffreicheres Futter geben. Das hebt Phosphat auf natürliche Weise an.',
+                    'Ein Phosphatwert um 0,02 bis 0,10 mg/l ist für die meisten Riffbecken ein guter Bereich.',
+                    'Bei einem Phosphat-Produkt in sehr kleinen Schritten vorgehen und nach jedem Schritt nachmessen.'
+                ], warn: 'Phosphat nicht auf null drücken. Zu wenig Phosphat lässt Korallen ausbleichen und begünstigt Cyanobakterien.' },
+                high: { plus: [
+                    'Ursachen suchen: Überfütterung, phosphatreiches Futter, schlechtes Osmosewasser (TDS messen, Filter prüfen) und viel Mulm.',
+                    'Phosphat-Adsorber (GFO) in einem Reaktor mit geringem Durchfluss verwenden und regelmäßig wechseln. Zu viel auf einmal senkt den Wert zu schnell.',
+                    'Abschäumer, Filtermatten und Technikbecken reinigen, damit sich dort kein Phosphat anreichert und wieder freigesetzt wird.',
+                    'Wasserwechsel mit phosphatfreiem Neuwasser und angepasster Fütterung. Den Wert danach in wenigen Tagen nachmessen.'
+                ], warn: 'Langsam senken, höchstens etwa 30 % pro Schritt. Zu schnelles Absenken kann Korallen schädigen.' }
+            },
+            temp: {
+                low: { plus: [
+                    'Heizer und Thermostat prüfen. Mit einem zweiten, unabhängigen Thermometer gegenmessen.',
+                    'Ein zweiter Regler (Sicherheitsthermostat) schützt, wenn der Hauptregler ausfällt.',
+                    'Raumtemperatur, Zugluft und Standort des Beckens berücksichtigen, besonders im Winter.',
+                    'Die Temperatur möglichst konstant halten. Tägliche Schwankungen von mehr als etwa 1 °C belasten Korallen mehr als ein leicht abweichender, stabiler Wert.'
+                ], warn: 'Nicht mehr als etwa 1 °C pro Tag anheben.' },
+                high: { plus: [
+                    'Ventilator, Lüfter oder Kühler einsetzen und die Beleuchtung dimmen oder kürzer laufen lassen.',
+                    'Abwärme von Pumpen, Beleuchtung und Technik reduzieren, Abdeckung öffnen und den Raum kühlen.',
+                    'Heizer und Thermostat prüfen: Klemmt der Heizer, steigt die Temperatur dauerhaft.',
+                    'Achte bei höherer Temperatur auf die Salinität, weil durch Verdunstung mehr Wasser fehlt und der Salzgehalt steigt.'
+                ], warn: 'Dauerhaft über etwa 28 °C steigt das Risiko für Korallenbleiche deutlich. Höher als 30 °C ist akut gefährlich.' }
+            },
+            ph: {
+                low: { plus: [
+                    'CO₂-Abscheider am Abschäumer: Atemkalk (Natronkalk, englisch Soda Lime) im Filterbehälter vor dem Lufteinlass bindet das CO₂ aus der Raumluft. Das hebt den pH-Wert oft schon um 0,1 bis 0,3 und stabilisiert ihn. Den Atemkalk wechseln, sobald er verbraucht ist (Farbumschlag oder nach der Herstellerangabe).',
+                    'Alternativ den Ansaugschlauch des Abschäumers nach draußen oder in einen CO₂-armen Raum legen und regelmäßig lüften.',
+                    'Kalkwasser als Nachfüllwasser (statt reinem Osmosewasser) hebt den pH-Wert leicht an und liefert nebenbei Calcium und KH. Das braucht passende Dosiertechnik und sollte nur nach Herstellerangabe und langsam eingeführt werden.',
+                    'KH prüfen: Eine zu niedrige KH puffert den pH-Wert schlecht und führt zu stärkeren Schwankungen.',
+                    'pH-Sonde kalibrieren (Pufferlösung pH 7 und pH 10) und mit einem zweiten Messverfahren (Tropfentest) gegenprüfen.'
+                ], warn: 'Kein „pH-Plus“ aus dem Handel verwenden. Der pH-Wert schwankt im Tagesverlauf um etwa 0,1 bis 0,3 (nachts niedriger). Immer zur gleichen Tageszeit messen.' },
+                high: { plus: [
+                    'Sehr hohe Werte über etwa 8,6 sind im Meerwasseraquarium ungewöhnlich. Prüfe zuerst die Sonde: kalibrieren und mit einem Tropfentest gegenmessen.',
+                    'Messzeitpunkt beachten: Der Tageshöchstwert liegt am späten Nachmittag, wenn die Beleuchtung lange gelaufen ist.',
+                    'Kalkwasser-Dosierung oder KH-Zufuhr drosseln, wenn der Wert nach der Dosierung steigt.',
+                    'Hohe KH zusammen mit hohem Calcium prüfen, denn beides treibt den pH-Wert nach oben.'
+                ], warn: 'Ein plötzlicher, sehr hoher pH-Wert ist meist ein Messfehler oder eine zu schnelle Dosierung. Erst nachmessen, dann handeln.' }
+            }
+        };
+        Object.keys(KB_PLUS).forEach(k => ['low', 'high'].forEach(d => Object.assign(KB[k][d], KB_PLUS[k][d])));
 
         function fmtNum(v) { return Number(Number(v).toFixed(3)).toLocaleString('de-DE'); }
         function fmtDose(x) { return x >= 10 ? String(Math.round(x)) : (x >= 1 ? fmtNum(Math.round(x * 10) / 10) : fmtNum(Math.round(x * 100) / 100)); }
@@ -1860,6 +1980,8 @@
                     <div class="rec-sec"><b>Einordnung</b><br>${kb.ein}</div>
                     <div class="rec-sec"><b>Mögliche Ursachen</b><br>${kb.ursache}</div>
                     <div class="rec-sec"><b>Was du tun kannst</b><br>${kb.massn}</div>
+                    ${kb.plus ? `<div class="rec-sec"><b>Zusätzlich empfohlen</b><ul class="rec-plus">${kb.plus.map(x => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+                    ${kb.warn ? `<div class="rec-warn">⚠️ ${kb.warn}</div>` : ''}
                     ${steps ? `<div class="rec-sec"><b>Schrittplan</b> <span class="rec-meta">(${P.target}${P.limit ? ' · Grenze: ' + P.limit : ''})</span><ol class="rec-steps">${steps}</ol>${P.more ? '<div class="rec-meta">Danach weiter nach der Nachmessung.</div>' : ''}<div class="rec-meta">Nach jedem Schritt nachmessen (nach ${P.recheck}), erst dann den nächsten Schritt. Beachte die Anwendungshinweise deines Herstellers.</div></div>` : ''}
                     ${P.daily.length ? `<div class="rec-sec"><b>Tagesdosis anpassen</b>${P.target && !steps ? ` <span class="rec-meta">(${P.target})</span>` : ''}${P.daily.map(x => `<div>${escapeHtml(x)}</div>`).join('')}<div class="rec-meta">${steps ? 'Zusätzlich zum Schrittplan oben. ' : ''}Nach 3–7 Tagen nachmessen und bei Bedarf erneut anpassen.</div></div>` : ''}
                     ${P.needProduct ? '<div class="rec-info">Für Mengenangaben trage dein Produkt und das Nettovolumen im Reiter <span class="rec-link" onclick="openProducts()">Dosierungen</span> ein.</div>' : ''}
