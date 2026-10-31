@@ -112,8 +112,8 @@
         .nav-tabs {
             display: flex;
             justify-content: center;
-            gap: 4px;
-            padding: 0 8px;
+            gap: 3px;
+            padding: 0 6px;
             margin-bottom: 20px;
         }
 
@@ -121,9 +121,9 @@
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: var(--text-muted);
-            padding: 9px 7px;
+            padding: 9px 6px;
             border-radius: 20px;
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             flex: 0 1 auto;
             min-width: 0;
             justify-content: center;
@@ -632,6 +632,25 @@
         }
 
         /* PDF & Action Buttons layout */
+        .timer-panel { padding: 14px 16px; }
+        .tm-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .tm-title { font-weight: 700; font-size: 0.95rem; }
+        .tm-display { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 1px; color: #fff; }
+        .timer-panel.run .tm-display { color: var(--color-sal); }
+        .timer-panel.done { border-color: #f6d365; box-shadow: 0 0 14px rgba(246, 211, 101, 0.35); animation: tmPulse 1.4s ease-in-out infinite; }
+        .timer-panel.done .tm-display { color: #f6d365; }
+        @keyframes tmPulse { 50% { box-shadow: 0 0 4px rgba(246, 211, 101, 0.1); } }
+        .tm-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .tm-presets button, .tm-custom button { padding: 8px 4px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #fff; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .tm-custom { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+        .tm-custom input { width: 54px; text-align: center; padding: 8px 4px; }
+        .tm-custom .tm-main { flex: 1; background: linear-gradient(135deg, rgba(79,227,238,0.25), rgba(42,143,168,0.25)); border-color: var(--color-sal); }
+        .tm-toast { display: none; position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 10px); z-index: 50; background: rgba(40, 32, 8, 0.95); border: 1px solid #f6d365; color: #f6d365; padding: 10px 16px; border-radius: 14px; font-weight: 700; font-size: 0.85rem; }
+        .thr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 10px; margin-top: 8px; }
+        .thr-grid label { display: block; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; }
+        .thr-err { color: #ff8aa0; font-size: 0.78rem; margin-top: 6px; }
+        .thr-tag { font-size: 0.68rem; color: #f6d365; font-weight: 600; margin-left: 6px; }
+        .thr-link { background: none; border: none; color: var(--color-sal); font-size: 0.72rem; cursor: pointer; padding: 0 0 0 8px; font-family: inherit; }
         .sub-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
         .sub-nav button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.66rem; font-weight: 600; cursor: pointer; font-family: inherit; }
         .sub-nav button .sn-ico { font-size: 1.15rem; line-height: 1; }
@@ -718,7 +737,10 @@
         <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
         <button class="tab-btn" data-tab="input" onclick="switchTab('input')">➕ Messwerte</button>
         <button class="tab-btn" data-tab="dosing" onclick="switchTab('dosing')">🧪 Dosierungen</button>
+        <button class="tab-btn" data-tab="targets" onclick="switchTab('targets')">🎯 Sollwerte</button>
     </div>
+
+    <div class="tm-toast" id="tmToast" onclick="tmReset()">⏰ Countdown abgelaufen – tippen zum Beenden</div>
 
     <div class="container">
 
@@ -731,6 +753,22 @@
                 <button type="button" data-sub="bak" onclick="showSub('bak')"><span class="sn-ico">💾</span><span>Backup</span></button>
             </div>
             <div data-sub="main">
+            <div class="glass-panel timer-panel" id="timerPanel">
+                <div class="tm-top"><span class="tm-title">⏱️ Countdown</span><span class="tm-display" id="tmDisplay">00:00</span></div>
+                <div class="tm-presets">
+                    <button type="button" onclick="tmStart(60)">1 Min</button>
+                    <button type="button" onclick="tmStart(180)">3 Min</button>
+                    <button type="button" onclick="tmStart(300)">5 Min</button>
+                    <button type="button" onclick="tmStart(420)">7 Min</button>
+                </div>
+                <div class="tm-custom">
+                    <input type="number" id="tmMin" class="input-styled" min="0" max="999" inputmode="numeric" placeholder="Min">
+                    <span>:</span>
+                    <input type="number" id="tmSec" class="input-styled" min="0" max="59" inputmode="numeric" placeholder="Sek">
+                    <button type="button" class="tm-main" id="tmMain" onclick="tmMainClick()">▶ Start</button>
+                    <button type="button" onclick="tmReset()">↺</button>
+                </div>
+            </div>
             <div class="glass-panel">
                 <div class="panel-title">🟢 Aktueller Beckenstatus</div>
                 <div class="dashboard-grid" id="dashboardValues">
@@ -826,6 +864,16 @@
                 <textarea id="backupText" class="input-styled" rows="3" placeholder="… oder kopiertes Backup hier einfügen" style="margin-top: 8px; font-size: 0.8rem;"></textarea>
                 <button type="button" class="btn-note" onclick="restoreFromText(document.getElementById('backupText').value)">⬆️ Aus eingefügtem Text einspielen</button>
             </details>
+            </div>
+        </div>
+
+        <!-- SOLLWERTE TAB -->
+        <div id="targets" class="tab-content">
+            <div class="glass-panel">
+                <h2 style="font-size:1.1rem; margin-bottom:6px;">🎯 Meine Sollwerte</h2>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0;">Lege fest, in welchem Bereich deine Werte liegen sollen. Status, Farben, Trendkurve, Empfehlungen und PDF-Report richten sich danach. „Dosieren ab“ und „Senken ab“ bestimmen, ab welchem Wert die App eine Empfehlung gibt. Feld leer lassen = automatisch.</div>
+                <button type="button" class="btn-note" onclick="resetThresholds()">↺ Auf Standardwerte zurücksetzen</button>
+                <div id="targetRows"></div>
             </div>
         </div>
 
@@ -953,6 +1001,8 @@
 
         // Init App
         document.addEventListener('DOMContentLoaded', () => {
+            applyThresholds();
+            tmInit();
             setFormNow();
             const imgD = document.getElementById('imgDate'); if (imgD) imgD.valueAsDate = new Date();
             renderDashboard();
@@ -1004,6 +1054,7 @@
             document.getElementById(tabId).classList.add('active');
             if (tabId === 'input' && formIsEmpty()) setFormNow();
             if (tabId === 'dosing') renderProductSettings();
+            if (tabId === 'targets') renderTargetRows();
             
             if (tabId === 'dashboard') {
                 setTimeout(() => { if(myChart) myChart.update(); }, 50);
@@ -1290,6 +1341,205 @@
             recheckMs: { sal: 1, kh: 1, ca: 1, mg: 1, no3: 3, po4: 3, temp: 1, ph: 1 },
             slots: { sal: ['up'], kh: ['up'], ca: ['up'], mg: ['up'], no3: ['down', 'up'], po4: ['down', 'up'] }
         };
+
+        // ===== Eigene Sollwerte =====
+        const DEFAULT_THR = JSON.parse(JSON.stringify(thresholds));
+        const DEFAULT_TRIG = { low: Object.assign({}, REC.trigLow), high: Object.assign({}, REC.trigHigh), target: Object.assign({}, REC.target) };
+        let userThr = (() => { try { const x = JSON.parse(localStorage.getItem('pepeaqua_thresholds')); return x && typeof x === 'object' ? x : {}; } catch (e) { return {}; } })();
+        function saveThr() { try { localStorage.setItem('pepeaqua_thresholds', JSON.stringify(userThr)); } catch (e) {} }
+        const r3 = x => Number(Number(x).toFixed(3));
+
+        function effectiveThr(k, ov) {
+            const d = DEFAULT_THR[k], u = ov || userThr[k] || {};
+            const minOpt = u.minOpt !== undefined ? u.minOpt : d.minOpt;
+            const maxOpt = u.maxOpt !== undefined ? u.maxOpt : d.maxOpt;
+            const dl = DEFAULT_TRIG.low[k], dh = DEFAULT_TRIG.high[k], dt = DEFAULT_TRIG.target[k];
+            const trigLow = u.trigLow !== undefined ? u.trigLow : (dl !== undefined ? r3(minOpt - (d.minOpt - dl)) : undefined);
+            const trigHigh = u.trigHigh !== undefined ? u.trigHigh : (dh !== undefined ? r3(maxOpt + (dh - d.maxOpt)) : undefined);
+            let target = u.target;
+            if (target === undefined && dt !== undefined) {
+                const raw = minOpt + (dt - d.minOpt) / (d.maxOpt - d.minOpt) * (maxOpt - minOpt);
+                const stp = Math.pow(10, Math.floor(Math.log10(maxOpt - minOpt)) - 1);
+                target = r3(Math.round(raw / stp) * stp);
+            }
+            return { minOpt, maxOpt, trigLow, trigHigh, target };
+        }
+
+        function applyThresholds() {
+            Object.keys(DEFAULT_THR).forEach(k => {
+                const d = DEFAULT_THR[k], e = effectiveThr(k);
+                thresholds[k].minOpt = e.minOpt;
+                thresholds[k].maxOpt = e.maxOpt;
+                thresholds[k].minTol = r3(e.minOpt - (d.minOpt - d.minTol));
+                thresholds[k].maxTol = r3(e.maxOpt + (d.maxTol - d.maxOpt));
+                ['trigLow', 'trigHigh', 'target'].forEach(f => {
+                    if (e[f] === undefined) delete REC[f][k]; else REC[f][k] = e[f];
+                });
+            });
+        }
+
+        function validateThr(k, u) {
+            const e = effectiveThr(k, u), cfg = thresholds[k];
+            if (!(e.minOpt < e.maxOpt)) return 'Der Sollbereich ist ungültig: „von“ muss kleiner sein als „bis“.';
+            const mid = (e.minOpt + e.maxOpt) / 2;
+            const tg = e.target !== undefined ? e.target : mid;
+            if (tg < e.minOpt || tg > e.maxOpt) return 'Der Zielwert muss innerhalb des Sollbereichs liegen.';
+            if (e.trigLow !== undefined && !(e.trigLow < tg)) return '„Dosieren ab“ muss unter dem Zielwert liegen.';
+            if (e.trigHigh !== undefined && !(e.trigHigh > tg)) return '„Senken ab“ muss über dem Zielwert liegen.';
+            return null;
+        }
+
+        function refreshAfterThr() {
+            applyThresholds();
+            renderDashboard();
+            renderRecommendations();
+            renderHistoryTable();
+            updateChart();
+            renderTargetRows();
+        }
+
+        const thrErr = {};
+        function setThr(k, field, v) {
+            const n = parseFloat(String(v).replace(',', '.'));
+            const u = Object.assign({}, userThr[k] || {});
+            if (isFinite(n)) u[field] = n; else delete u[field];
+            const err = validateThr(k, u);
+            if (err) { thrErr[k] = err; renderTargetRows(); return; }
+            delete thrErr[k];
+            if (Object.keys(u).length) userThr[k] = u; else delete userThr[k];
+            saveThr();
+            refreshAfterThr();
+        }
+        function resetThrParam(k) { delete userThr[k]; delete thrErr[k]; saveThr(); refreshAfterThr(); }
+        function resetThresholds() {
+            if (!confirm('Alle Sollwerte auf die Standardwerte zurücksetzen?')) return;
+            userThr = {}; Object.keys(thrErr).forEach(x => delete thrErr[x]); saveThr(); refreshAfterThr();
+        }
+
+        function renderTargetRows() {
+            const box = document.getElementById('targetRows');
+            if (!box) return;
+            const fld = (k, f, label, val, ph) => `<div><label>${label}</label><input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${ph}" value="${val === undefined ? '' : val}" onchange="setThr('${k}','${f}',this.value)"></div>`;
+            box.innerHTML = Object.keys(thresholds).map(k => {
+                const cfg = thresholds[k], e = effectiveThr(k), custom = !!userThr[k];
+                const unit = cfg.unit ? ' (' + cfg.unit + ')' : '';
+                const ex = userThr[k] || {};
+                return `<div class="prod-block">
+                    <div class="prod-title" style="color:${paramColors[k]}">${cfg.label}${unit}${custom ? '<span class="thr-tag">✎ angepasst</span><button type="button" class="thr-link" onclick="resetThrParam(\'' + k + '\')">zurücksetzen</button>' : ''}</div>
+                    <div class="thr-grid">
+                        ${fld(k, 'minOpt', 'Soll von', e.minOpt, '')}
+                        ${fld(k, 'maxOpt', 'Soll bis', e.maxOpt, '')}
+                        ${fld(k, 'trigLow', 'Dosieren ab (oder darunter)', ex.trigLow !== undefined || DEFAULT_TRIG.low[k] !== undefined ? e.trigLow : undefined, 'unter Soll')}
+                        ${fld(k, 'trigHigh', 'Senken ab (oder darüber)', ex.trigHigh !== undefined || DEFAULT_TRIG.high[k] !== undefined ? e.trigHigh : undefined, 'über Soll')}
+                        ${fld(k, 'target', 'Zielwert', e.target !== undefined ? e.target : undefined, 'Mitte: ' + fmtNum((e.minOpt + e.maxOpt) / 2))}
+                    </div>
+                    ${thrErr[k] ? `<div class="thr-err">⚠️ ${thrErr[k]} Die Änderung wurde nicht übernommen.</div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        // ===== Countdown =====
+        let tm = { state: 'idle', total: 0, end: 0, left: 0 };
+        let tmTimer = null, tmAudio = null, tmWake = null;
+        function tmSave() { try { localStorage.setItem('pepeaqua_timer', JSON.stringify(tm)); } catch (e) {} }
+        function tmFmt(ms) {
+            const t = Math.max(0, Math.ceil(ms / 1000));
+            return pad2(Math.floor(t / 60)) + ':' + pad2(t % 60);
+        }
+        function tmInit() {
+            try { const x = JSON.parse(localStorage.getItem('pepeaqua_timer')); if (x && typeof x === 'object') tm = Object.assign(tm, x); } catch (e) {}
+            if (tm.state === 'run') { if (tm.end - Date.now() <= 0) tm.state = 'done'; else tmEnsureTick(); }
+            if (tm.state === 'done') tm.left = 0;
+            tmRender();
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) tmTick(); });
+            document.addEventListener('pointerdown', () => { if (tm.state === 'run') tmUnlock(); }, { passive: true });
+        }
+        function tmUnlock() {
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                if (!tmAudio) tmAudio = new AC();
+                if (tmAudio.state === 'suspended') tmAudio.resume();
+                const b = tmAudio.createBuffer(1, 1, 22050), src = tmAudio.createBufferSource();
+                src.buffer = b; src.connect(tmAudio.destination); src.start(0);
+            } catch (e) {}
+        }
+        function tmChime() {
+            try {
+                tmUnlock();
+                const c = tmAudio; if (!c) return;
+                let t = c.currentTime + 0.05;
+                for (let i = 0; i < 3; i++) {
+                    [[660, 0], [880, 0.3]].forEach(([f, o]) => {
+                        const osc = c.createOscillator(), g = c.createGain();
+                        osc.type = 'sine'; osc.frequency.value = f;
+                        g.gain.setValueAtTime(0.0001, t + o);
+                        g.gain.exponentialRampToValueAtTime(0.12, t + o + 0.04);
+                        g.gain.exponentialRampToValueAtTime(0.0001, t + o + 0.55);
+                        osc.connect(g); g.connect(c.destination);
+                        osc.start(t + o); osc.stop(t + o + 0.6);
+                    });
+                    t += 1.4;
+                }
+            } catch (e) {}
+        }
+        function tmWakeOn() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { tmWake = l; }).catch(() => {}); } catch (e) {} }
+        function tmWakeOff() { try { if (tmWake) { tmWake.release(); tmWake = null; } } catch (e) {} }
+        function tmEnsureTick() { if (!tmTimer) tmTimer = setInterval(tmTick, 250); }
+        function tmTick() {
+            if (tm.state === 'run') {
+                tm.left = tm.end - Date.now();
+                if (tm.left <= 0) tmFinish();
+            }
+            tmRender();
+        }
+        function tmFinish() {
+            tm.state = 'done'; tm.left = 0;
+            clearInterval(tmTimer); tmTimer = null;
+            tmWakeOff(); tmSave();
+            tmChime();
+            try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+            const panel = document.getElementById('timerPanel');
+            if (panel && !panel.offsetParent) document.getElementById('tmToast').style.display = 'block';
+        }
+        function tmRender() {
+            const disp = document.getElementById('tmDisplay'); if (!disp) return;
+            const ms = tm.state === 'run' ? Math.max(0, tm.end - Date.now()) : (tm.state === 'pause' ? tm.left : (tm.state === 'done' ? 0 : tm.total));
+            disp.textContent = tmFmt(ms);
+            const panel = document.getElementById('timerPanel');
+            panel.classList.toggle('run', tm.state === 'run');
+            panel.classList.toggle('done', tm.state === 'done');
+            document.getElementById('tmMain').textContent = { idle: '▶ Start', run: '⏸ Pause', pause: '▶ Weiter', done: '▶ Neu starten' }[tm.state];
+            if (tm.state !== 'done') document.getElementById('tmToast').style.display = 'none';
+        }
+        function tmStart(sec) {
+            if (!(sec > 0)) return;
+            tmUnlock();
+            tm = { state: 'run', total: sec * 1000, end: Date.now() + sec * 1000, left: sec * 1000 };
+            tmEnsureTick(); tmWakeOn(); tmSave(); tmRender();
+        }
+        function tmMainClick() {
+            tmUnlock();
+            if (tm.state === 'run') {
+                tm.left = Math.max(0, tm.end - Date.now()); tm.state = 'pause';
+                clearInterval(tmTimer); tmTimer = null; tmWakeOff();
+            } else if (tm.state === 'pause') {
+                tm.end = Date.now() + tm.left; tm.state = 'run'; tmEnsureTick(); tmWakeOn();
+            } else {
+                const m = parseFloat(document.getElementById('tmMin').value) || 0;
+                const sc = parseFloat(document.getElementById('tmSec').value) || 0;
+                const sec = Math.round(m * 60 + sc);
+                tmStart(sec > 0 ? sec : Math.round(tm.total / 1000));
+                return;
+            }
+            tmSave(); tmRender();
+        }
+        function tmReset() {
+            tm = { state: 'idle', total: tm.total, end: 0, left: 0 };
+            clearInterval(tmTimer); tmTimer = null; tmWakeOff();
+            document.getElementById('tmToast').style.display = 'none';
+            tmSave(); tmRender();
+        }
 
         const KB = {
             sal: {
@@ -1920,7 +2170,7 @@
         }
 
         // ===== Datensicherung =====
-        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups'];
+        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds'];
 
         function buildBackup() {
             const data = {};
