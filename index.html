@@ -753,22 +753,6 @@
                 <button type="button" data-sub="bak" onclick="showSub('bak')"><span class="sn-ico">💾</span><span>Backup</span></button>
             </div>
             <div data-sub="main">
-            <div class="glass-panel timer-panel" id="timerPanel">
-                <div class="tm-top"><span class="tm-title">⏱️ Countdown</span><span class="tm-display" id="tmDisplay">00:00</span></div>
-                <div class="tm-presets">
-                    <button type="button" onclick="tmStart(60)">1 Min</button>
-                    <button type="button" onclick="tmStart(180)">3 Min</button>
-                    <button type="button" onclick="tmStart(300)">5 Min</button>
-                    <button type="button" onclick="tmStart(420)">7 Min</button>
-                </div>
-                <div class="tm-custom">
-                    <input type="number" id="tmMin" class="input-styled" min="0" max="999" inputmode="numeric" placeholder="Min">
-                    <span>:</span>
-                    <input type="number" id="tmSec" class="input-styled" min="0" max="59" inputmode="numeric" placeholder="Sek">
-                    <button type="button" class="tm-main" id="tmMain" onclick="tmMainClick()">▶ Start</button>
-                    <button type="button" onclick="tmReset()">↺</button>
-                </div>
-            </div>
             <div class="glass-panel">
                 <div class="panel-title">🟢 Aktueller Beckenstatus</div>
                 <div class="dashboard-grid" id="dashboardValues">
@@ -888,6 +872,22 @@
 
         <!-- INPUT TAB -->
         <div id="input" class="tab-content">
+            <div class="glass-panel timer-panel" id="timerPanel">
+                <div class="tm-top"><span class="tm-title">⏱️ Countdown</span><span class="tm-display" id="tmDisplay">00:00</span></div>
+                <div class="tm-presets">
+                    <button type="button" onclick="tmStart(60)">1 Min</button>
+                    <button type="button" onclick="tmStart(180)">3 Min</button>
+                    <button type="button" onclick="tmStart(300)">5 Min</button>
+                    <button type="button" onclick="tmStart(420)">7 Min</button>
+                </div>
+                <div class="tm-custom">
+                    <input type="number" id="tmMin" class="input-styled" min="0" max="999" inputmode="numeric" placeholder="Min">
+                    <span>:</span>
+                    <input type="number" id="tmSec" class="input-styled" min="0" max="59" inputmode="numeric" placeholder="Sek">
+                    <button type="button" class="tm-main" id="tmMain" onclick="tmMainClick()">▶ Start</button>
+                    <button type="button" onclick="tmReset()">↺</button>
+                </div>
+            </div>
             <div class="glass-panel form-container">
                 <div class="type-toggle-container">
                     <div id="toggleHome" class="type-toggle active" onclick="setRecordType('Heimtest')">🏠 Heim-Wassertest</div>
