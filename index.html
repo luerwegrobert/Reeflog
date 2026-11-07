@@ -210,7 +210,7 @@
         .spark-wrap { margin-top: 6px; }
         .spark { width: 100%; height: 44px; display: block; }
         .spark-cap, .spark-empty { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-        .spark-empty { padding: 8px 0 0; }
+        .spark-empty { min-height: 74px; display: flex; align-items: center; justify-content: center; text-align: center; border-radius: 6px; background: rgba(255,255,255,0.03); }
         .param-card.sal { border-left-color: var(--color-sal); }
         .param-card.kh { border-left-color: var(--color-kh); }
         .param-card.ca { border-left-color: var(--color-ca); }
@@ -1281,14 +1281,21 @@
             if (pts.length > 1) {
                 const dv = pts[pts.length - 1].v - pts[0].v, r = Math.round(dv * 1000) / 1000;
                 const arrow = r > 0 ? '↗' : r < 0 ? '↘' : '→';
-                trend = `${arrow} ${r > 0 ? '+' : r < 0 ? '−' : '±'}${fmtNum(Math.abs(r))}${cfg.unit ? ' ' + cfg.unit : ''} · 7 Tage`;
-            } else trend = '1 Messung · 7 Tage';
+                trend = `${arrow} ${r > 0 ? '+' : r < 0 ? '−' : '±'}${fmtNum(Math.abs(r))}${cfg.unit ? ' ' + cfg.unit : ''}`;
+            } else trend = '1 Messung in 7 Tagen';
+            const decs = Math.min(3, Math.max(...vs.map(v => { const t = String(v).split('.')[1]; return t ? t.length : 0; })));
+            const rd = x => fmtNum(Math.round(x * Math.pow(10, decs)) / Math.pow(10, decs)), avg = vs.reduce((a, b) => a + b, 0) / vs.length;
+            const detail = pts.length > 1 ? `7 Tage · ${pts.length} Messungen</div><div class="spark-cap">Ø ${rd(avg)} · ${rd(dmin)}–${rd(dmax)}` : `Wert ${rd(vs[0])}${cfg.unit ? ' ' + cfg.unit : ''}`;
+            const grid = [1, 2, 3, 4, 5, 6].map(i => { const gx = (3 + i / 7 * 94).toFixed(2); return `<path d="M${gx} 0 V${H}" stroke="rgba(255,255,255,0.06)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
+            const dots = P.map((q, i) => i === P.length - 1 ? '' : `<path d="M${q[0].toFixed(2)} ${q[1].toFixed(2)} h0.01" stroke="${color}" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.8"/>`).join('');
             return `<div class="spark-wrap"><svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
                 <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.35"/><stop offset="1" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
                 <rect x="0" y="${bt.toFixed(2)}" width="100" height="${Math.max(0, bb - bt).toFixed(2)}" fill="rgba(0,255,135,0.08)"/>
+                ${grid}
                 ${pts.length > 1 ? `<path d="${area}" fill="url(#${gid})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : ''}
+                ${dots}
                 <path d="M${last[0].toFixed(2)} ${last[1].toFixed(2)} h0.01" stroke="${color}" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-            </svg><div class="spark-cap" style="color:${color};">${trend}</div></div>`;
+            </svg><div class="spark-cap" style="color:${color};font-weight:600;">${trend}</div><div class="spark-cap">${detail}</div></div>`;
         }
         function renderDashboard() {
             const grid = document.getElementById('dashboardValues');
