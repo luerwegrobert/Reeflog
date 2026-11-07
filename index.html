@@ -1253,10 +1253,14 @@
         }
 
         function sparkSvg(param, color) {
-            const to = Date.now(), from = to - 7 * DAY_MS, cfg = thresholds[param];
-            const pts = records.map(r => ({ ts: recTs(r), v: parseFloat(r.values && r.values[param]) }))
-                .filter(q => isFinite(q.v) && q.ts >= from && q.ts <= to + 3600000).sort((a, b) => a.ts - b.ts);
-            if (!pts.length) return `<div class="spark-wrap"><div class="spark-empty">keine Messung in 7 Tagen</div></div>`;
+            const now = Date.now(), cfg = thresholds[param];
+            const all = records.map(r => ({ ts: recTs(r), v: parseFloat(r.values && r.values[param]) }))
+                .filter(q => isFinite(q.v) && q.ts <= now + 3600000).sort((a, b) => a.ts - b.ts);
+            if (!all.length) return `<div class="spark-wrap"><div class="spark-empty">noch keine Messung</div></div>`;
+            let pts = all.filter(q => q.ts >= now - 7 * DAY_MS);
+            const extended = pts.length < 2 && all.length >= 2;
+            let from = now - 7 * DAY_MS, to = now;
+            if (extended) { pts = all.slice(-6); from = pts[0].ts - DAY_MS * 0.5; to = Math.max(now, pts[pts.length - 1].ts); }
             const vs = pts.map(q => q.v), dmin = Math.min(...vs), dmax = Math.max(...vs);
             const minSpan = (cfg.maxOpt - cfg.minOpt) * 0.35;
             let lo = dmin, hi = dmax;
@@ -1287,8 +1291,9 @@
                 const tot = Math.round((vs[vs.length - 1] - vs[0]) * 1000) / 1000;
                 trend = `${ar(prev)} ${sg(prev)}${fmtNum(Math.abs(prev))}${u}`;
                 detail = `Ø ${rd(avg)} · ${rd(dmin)}–${rd(dmax)}`;
-            } else { trend = '1 Messung'; detail = '7 Tage'; }
-            const grid = [1, 2, 3, 4, 5, 6].map(i => { const gx = (3 + i / 7 * 94).toFixed(2); return `<path d="M${gx} 0 V${H}" stroke="rgba(255,255,255,0.06)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
+                if (extended) { const f2 = t => { const dd = new Date(t); return pad2(dd.getDate()) + '.' + pad2(dd.getMonth() + 1) + '.'; }; detail += `</div><div class="spark-cap">Verlauf ${f2(pts[0].ts)}–${f2(pts[pts.length - 1].ts)}`; }
+            } else { trend = '1 Messung'; detail = extended ? '' : '7 Tage'; }
+            const grid = extended ? '' : [1, 2, 3, 4, 5, 6].map(i => { const gx = (3 + i / 7 * 94).toFixed(2); return `<path d="M${gx} 0 V${H}" stroke="rgba(255,255,255,0.06)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
             const dots = P.map((q, i) => i === P.length - 1 ? '' : `<path d="M${q[0].toFixed(2)} ${q[1].toFixed(2)} h0.01" stroke="${color}" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.8"/>`).join('');
             return `<div class="spark-wrap"><svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
                 <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.35"/><stop offset="1" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
