@@ -1285,9 +1285,9 @@
             if (pts.length > 1) {
                 const prev = Math.round((vs[vs.length - 1] - vs[vs.length - 2]) * 1000) / 1000;
                 const tot = Math.round((vs[vs.length - 1] - vs[0]) * 1000) / 1000;
-                trend = `${ar(prev)} ${sg(prev)}${fmtNum(Math.abs(prev))}${u} ggü. zuvor`;
-                detail = `7 Tage: ${sg(tot)}${fmtNum(Math.abs(tot))} (${rd(vs[0])} → ${rd(vs[vs.length - 1])})</div><div class="spark-cap">${pts.length} Messungen · Ø ${rd(avg)}</div><div class="spark-cap">Min ${rd(dmin)} · Max ${rd(dmax)}`;
-            } else { trend = '1 Messung in 7 Tagen'; detail = `Wert ${rd(vs[0])}${u}`; }
+                trend = `${ar(prev)} ${sg(prev)}${fmtNum(Math.abs(prev))}${u}`;
+                detail = `Ø ${rd(avg)} · ${rd(dmin)}–${rd(dmax)}`;
+            } else { trend = '1 Messung'; detail = '7 Tage'; }
             const grid = [1, 2, 3, 4, 5, 6].map(i => { const gx = (3 + i / 7 * 94).toFixed(2); return `<path d="M${gx} 0 V${H}" stroke="rgba(255,255,255,0.06)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
             const dots = P.map((q, i) => i === P.length - 1 ? '' : `<path d="M${q[0].toFixed(2)} ${q[1].toFixed(2)} h0.01" stroke="${color}" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.8"/>`).join('');
             return `<div class="spark-wrap"><svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
