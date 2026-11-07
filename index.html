@@ -207,6 +207,10 @@
             transform: scale(0.98);
         }
 
+        .spark-wrap { margin-top: 6px; }
+        .spark { width: 100%; height: 30px; display: block; }
+        .spark-cap, .spark-empty { font-size: 0.6rem; color: var(--text-muted); margin-top: 1px; }
+        .spark-empty { padding: 8px 0 0; }
         .param-card.sal { border-left-color: var(--color-sal); }
         .param-card.kh { border-left-color: var(--color-kh); }
         .param-card.ca { border-left-color: var(--color-ca); }
@@ -1043,13 +1047,25 @@
             ca: Array.from({ length: 51 }, (_, i) => 500 - 10 * i),
             mg: Array.from({ length: 51 }, (_, i) => 1500 - 30 * i)
         };
+        // Salinität (psu) -> Dichte (kg/m³) bzw. spez. Gewicht bei 25 °C
+        const SAL_PSU = [0, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39];
+        const SAL_DENS = [997.04, 1018.8, 1019.6, 1020.3, 1021.1, 1021.8, 1022.6, 1023.3, 1024.1, 1024.9, 1025.6, 1026.4];
+        const SAL_SG = [1000.0, 1021.8, 1022.6, 1023.3, 1024.1, 1024.9, 1025.6, 1026.4, 1027.1, 1027.9, 1028.6, 1029.4];
+        function interp(xs, ys, x) {
+            const n = xs.length; let i = 0;
+            while (i < n - 2 && x > xs[i + 1]) i++;
+            return ys[i] + (ys[i + 1] - ys[i]) * (x - xs[i]) / (xs[i + 1] - xs[i]);
+        }
+        const psu2dens = p => interp(SAL_PSU, SAL_DENS, p);
+        const dens2psu = d => interp(SAL_DENS, SAL_PSU, d);
+        const sg2psu = d => interp(SAL_SG, SAL_PSU, d);
         const SYR_DEC = { kh: 1, ca: 0, mg: 0 };
         const M = (id, label, extra) => Object.assign({ id, label }, extra || {});
         const METHODS = {
-            kh: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
-            sal: [M('refraktometer', 'Refraktometer'), M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('other', 'Sonstiges')],
-            ca: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,15' }), M('hanna', 'Hanna Checker'), M('jbl', 'JBL (Tropfen)', { conv: 'drops', factor: 20, inLabel: 'Tropfen', ph: 'z. B. 21' }), M('other', 'Sonstiges')],
-            mg: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
+            kh: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('salifert_val', 'Salifert (Wert)'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
+            sal: [M('refraktometer', 'Refraktometer'), M('araeo', 'Aräometer (Dichte)', { conv: 'dens', inLabel: 'Dichte in kg/m³', ph: 'z. B. 1023,3' }), M('araeo_sg', 'Aräometer (spez. Gewicht)', { conv: 'sg', inLabel: 'Spez. Gewicht', ph: 'z. B. 1026,4' }), M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('other', 'Sonstiges')],
+            ca: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,15' }), M('salifert_val', 'Salifert (Wert)'), M('hanna', 'Hanna Checker'), M('jbl', 'JBL (Tropfen)', { conv: 'drops', factor: 20, inLabel: 'Tropfen', ph: 'z. B. 21' }), M('other', 'Sonstiges')],
+            mg: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('salifert_val', 'Salifert (Wert)'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
             no3: [M('hanna', 'Hanna Checker'), M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('other', 'Sonstiges')],
             po4: [M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker (ppm)'), M('hanna_ppb', 'Hanna Checker (ppb)', { conv: 'ppb', inLabel: 'ppb Phosphor', ph: 'z. B. 14' }), M('nyos', 'NYOS'), M('other', 'Sonstiges')],
             temp: [M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('thermostat', 'Manuelles Thermostat'), M('other', 'Sonstiges')],
@@ -1073,6 +1089,12 @@
             if (m.conv === 'drops') {
                 if (n < 0) return { error: 'Die Tropfenzahl darf nicht negativ sein.' };
                 return { value: Math.round(n * m.factor * 10) / 10, converted: true };
+            }
+            if (m.conv === 'dens' || m.conv === 'sg') {
+                let x = n; if (x > 0 && x < 2) x *= 1000;
+                if (x < 1005 || x > 1040) return { error: 'Bitte einen Wert zwischen 1005 und 1040 eingeben (z. B. 1023,3).' };
+                const p = m.conv === 'dens' ? dens2psu(x) : sg2psu(x);
+                return { value: Math.round(p * 100) / 100, converted: true };
             }
             if (m.conv === 'ppb') {
                 if (n < 0) return { error: 'Der Wert darf nicht negativ sein.' };
@@ -1230,6 +1252,23 @@
             }
         }
 
+        function sparkSvg(param, color) {
+            const to = Date.now(), from = to - 7 * DAY_MS, cfg = thresholds[param];
+            const pts = records.map(r => ({ ts: recTs(r), v: parseFloat(r.values && r.values[param]) }))
+                .filter(q => isFinite(q.v) && q.ts >= from && q.ts <= to + 3600000).sort((a, b) => a.ts - b.ts);
+            if (!pts.length) return `<div class="spark-wrap"><div class="spark-empty">keine Messung in 7 Tagen</div></div>`;
+            let lo = Math.min(cfg.minOpt, ...pts.map(q => q.v)), hi = Math.max(cfg.maxOpt, ...pts.map(q => q.v));
+            const pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
+            const X = t => 2 + (t - from) / (to - from) * 96, Y = v => 28 - (v - lo) / (hi - lo) * 26;
+            const bandTop = Y(cfg.maxOpt), bandH = Y(cfg.minOpt) - bandTop;
+            let path = pts.map((q, i) => (i ? 'L' : 'M') + X(q.ts).toFixed(2) + ' ' + Y(q.v).toFixed(2)).join(' ');
+            const lastP = pts[pts.length - 1];
+            return `<div class="spark-wrap"><svg viewBox="0 0 100 30" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
+                <rect x="0" y="${bandTop.toFixed(2)}" width="100" height="${bandH.toFixed(2)}" fill="rgba(0,255,135,0.12)"/>
+                ${pts.length > 1 ? `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : ''}
+                <path d="M${X(lastP.ts).toFixed(2)} ${Y(lastP.v).toFixed(2)} h0.01" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            </svg><div class="spark-cap">7 Tage</div></div>`;
+        }
         function renderDashboard() {
             const grid = document.getElementById('dashboardValues');
             grid.innerHTML = '';
@@ -1256,6 +1295,7 @@
                 const stat = getStatusColorClass(param, val);
                 const meta = latestMeta[param];
                 const cfg = thresholds[param];
+                const spark = sparkSvg(param, stat.color);
                 
                 let cardHtml = `
                     <div class="param-card ${param}">
@@ -1270,6 +1310,7 @@
                             <span>Soll: ${cfg.minOpt}-${cfg.maxOpt}</span>
                             <span>${meta ? meta.date.split('-').reverse().slice(0,2).join('.') + (meta.time ? ' ' + meta.time : '') : ''} (${meta ? (meta.type === 'Heimtest' ? '🏠' : '🧪') : '-'})</span>
                         </div>
+                        ${spark}
                     </div>
                 `;
                 grid.innerHTML += cardHtml;
@@ -1473,8 +1514,9 @@
 
         const thrErr = {};
         function setThr(k, field, v) {
-            const n = parseFloat(String(v).replace(',', '.'));
+            let n = parseFloat(String(v).replace(',', '.'));
             const u = Object.assign({}, userThr[k] || {});
+            if (k === 'sal' && u.unit === 'dens' && isFinite(n)) n = Math.round(dens2psu(n) * 1000) / 1000;
             if (isFinite(n)) u[field] = n; else delete u[field];
             const err = validateThr(k, u);
             if (err) { thrErr[k] = err; renderTargetRows(); return; }
@@ -1482,6 +1524,16 @@
             if (Object.keys(u).length) userThr[k] = u; else delete userThr[k];
             saveThr();
             refreshAfterThr();
+        }
+        function setSalUnit(unit) {
+            const u = Object.assign({}, userThr.sal || {});
+            if (unit === 'dens') {
+                u.unit = 'dens';
+                if (u.minOpt === undefined && u.maxOpt === undefined) { u.minOpt = Math.round(dens2psu(1022.5) * 1000) / 1000; u.maxOpt = Math.round(dens2psu(1024.1) * 1000) / 1000; }
+            } else delete u.unit;
+            delete thrErr.sal;
+            if (Object.keys(u).length) userThr.sal = u; else delete userThr.sal;
+            saveThr(); refreshAfterThr();
         }
         function resetThrParam(k) { delete userThr[k]; delete thrErr[k]; saveThr(); refreshAfterThr(); }
         function resetThresholds() {
@@ -1492,19 +1544,24 @@
         function renderTargetRows() {
             const box = document.getElementById('targetRows');
             if (!box) return;
-            const fld = (k, f, label, val, ph) => `<div><label>${label}</label><input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${ph}" value="${val === undefined ? '' : val}" onchange="setThr('${k}','${f}',this.value)"></div>`;
+            let dens = false;
+            const cv = (k, x) => (k === 'sal' && dens && x !== undefined) ? Math.round(psu2dens(x) * 10) / 10 : x;
+            const fld = (k, f, label, val, ph) => `<div><label>${label}</label><input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${ph}" value="${val === undefined ? '' : cv(k, val)}" onchange="setThr('${k}','${f}',this.value)"></div>`;
             box.innerHTML = Object.keys(thresholds).map(k => {
+                dens = k === 'sal' && (userThr.sal || {}).unit === 'dens';
                 const cfg = thresholds[k], e = effectiveThr(k), custom = !!userThr[k];
-                const unit = cfg.unit ? ' (' + cfg.unit + ')' : '';
+                const unit = cfg.unit ? ' (' + (dens ? 'kg/m³ Dichte' : cfg.unit) + ')' : '';
                 const ex = userThr[k] || {};
+                const unitSw = k === 'sal' ? `<div class="prod-line" style="margin-bottom:6px;"><span>Einheit:</span><select class="input-styled" onchange="setSalUnit(this.value)"><option value="psu"${dens ? '' : ' selected'}>psu (Salinität)</option><option value="dens"${dens ? ' selected' : ''}>Dichte (Aräometer, kg/m³)</option></select></div>` : '';
                 return `<div class="prod-block">
                     <div class="prod-title" style="color:${paramColors[k]}">${cfg.label}${unit}${custom ? '<span class="thr-tag">✎ angepasst</span><button type="button" class="thr-link" onclick="resetThrParam(\'' + k + '\')">zurücksetzen</button>' : ''}</div>
+                    ${unitSw}
                     <div class="thr-grid">
                         ${fld(k, 'minOpt', 'Soll von', e.minOpt, '')}
                         ${fld(k, 'maxOpt', 'Soll bis', e.maxOpt, '')}
                         ${k === 'ph' ? '' : fld(k, 'trigLow', (k === 'temp' || k === 'sal') ? 'Erhöhen ab (oder darunter)' : 'Dosieren ab (oder darunter)', ex.trigLow !== undefined || DEFAULT_TRIG.low[k] !== undefined ? e.trigLow : undefined, 'unter Soll')}
                         ${k === 'ph' ? '' : fld(k, 'trigHigh', 'Senken ab (oder darüber)', ex.trigHigh !== undefined || DEFAULT_TRIG.high[k] !== undefined ? e.trigHigh : undefined, 'über Soll')}
-                        ${fld(k, 'target', 'Zielwert', e.target !== undefined ? e.target : undefined, 'Mitte: ' + fmtNum((e.minOpt + e.maxOpt) / 2))}
+                        ${fld(k, 'target', 'Zielwert', e.target !== undefined ? e.target : undefined, 'Mitte: ' + fmtNum(cv(k, (e.minOpt + e.maxOpt) / 2)))}
                     </div>
                     ${thrErr[k] ? `<div class="thr-err">⚠️ ${thrErr[k]} Die Änderung wurde nicht übernommen.</div>` : ''}
                 </div>`;
@@ -2013,7 +2070,9 @@
         // Tagesdosis: Anpassung der eigenen Erhaltungsdosis um 15 % (üblicher Richtwert, danach nachmessen)
         const DAILY_PCT = 0.15;
         const DAILY_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
-        function hasDaily(k, slot) { const p = appSettings.products[k + '_' + slot]; return !!(p && p.name && p.daily > 0); }
+        function lastGabe(slot) { return dosingLog.filter(e => e.kind === 'once' && e.slot === slot).sort((a, b) => b.ts - a.ts)[0] || null; }
+        function refDose(slot, p) { if (p && p.mode === 'once') { const g = lastGabe(slot); return g ? g.v : 0; } return p ? (p.daily || 0) : 0; }
+        function hasDaily(k, slot) { const p = appSettings.products[k + '_' + slot]; return !!(p && p.name && refDose(k + '_' + slot, p) > 0); }
         function dailyAdvice(it) {
             const k = it.k, cfg = thresholds[k], V = appSettings.volume;
             const out = [];
@@ -2025,14 +2084,15 @@
             jobs.forEach(([slot, sign]) => {
                 const p = appSettings.products[k + '_' + slot];
                 if (!p || !p.name) return;
-                if (!(p.daily > 0)) { missing = true; return; }
+                const once = p.mode === 'once', base = refDose(k + '_' + slot, p);
+                if (!(base > 0)) { missing = true; return; }
                 const u = p.unit || 'ml';
-                const neu = p.daily * (1 + sign * DAILY_PCT);
-                const eff = (p.effect > 0 && V > 0) ? (p.daily * DAILY_PCT) * p.effect / ((p.amount > 0 ? p.amount : 1) * (V / (p.per > 0 ? p.per : 100))) : null;
+                const neu = base * (1 + sign * DAILY_PCT);
+                const eff = (p.effect > 0 && V > 0) ? (base * DAILY_PCT) * p.effect / ((p.amount > 0 ? p.amount : 1) * (V / (p.per > 0 ? p.per : 100))) : null;
                 const effTxt = eff ? ` Das ändert ${cfg.label} rechnerisch um etwa ${fmtNum(eff)} ${cfg.unit} pro Tag.` : '';
-                out.push(`${p.name}: Tagesdosis von ${fmtNum(Math.round(p.daily * 100) / 100)} ${u} auf ${fmtNum(Math.round(neu * 100) / 100)} ${u} ${sign > 0 ? 'erhöhen' : 'reduzieren'} (${sign > 0 ? '+' : '−'}${Math.round(DAILY_PCT * 100)} %).${effTxt}`);
+                out.push(`${p.name}: ${once ? 'Einmal-Gabe' : 'Tagesdosis'} von ${fmtNum(Math.round(base * 100) / 100)} ${u} auf ${fmtNum(Math.round(neu * 100) / 100)} ${u} ${sign > 0 ? 'erhöhen' : 'reduzieren'} (${sign > 0 ? '+' : '−'}${Math.round(DAILY_PCT * 100)} %).${effTxt}`);
             });
-            if (!out.length && missing) out.push('Trage unter „Dosierungen“ deine aktuelle Tagesdosis ein, dann zeige ich dir hier die neue Tagesdosis.');
+            if (!out.length && missing) out.push('Trage unter „Dosierungen“ deine aktuelle Tagesdosis (oder deine letzte Einmal-Gabe) ein, dann zeige ich dir hier die neue Menge.');
             return out;
         }
 
@@ -2098,7 +2158,7 @@
                     ${P.tip ? `<div class="rec-info">${P.tip}</div>` : ''}
                     ${P.inter.map(x => `<div class="${x.level === 'warn' ? 'rec-warn' : 'rec-info'}">${x.text}</div>`).join('')}
                     ${P.trend ? `<div class="rec-info">${P.trend}</div>` : ''}
-                    ${steps ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Schritt 1 als Maßnahme eintragen</button>` : (P.daily.some(x => x.includes('Tagesdosis von')) ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Tagesdosis-Änderung als Maßnahme eintragen</button>` : '')}
+                    ${steps ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Schritt 1 als Maßnahme eintragen</button>` : (P.daily.some(x => /(Tagesdosis|Gabe) von/.test(x)) ? `<button type="button" class="btn-note save" onclick="logAction('${it.k}')">✅ Tagesdosis-Änderung als Maßnahme eintragen</button>` : '')}
                 </div>
             </details>`;
         }
@@ -2121,7 +2181,7 @@
             if (!it) return;
             let line = null;
             if (it.plan && it.plan.steps.length) line = actionLine(k, it.plan.steps[0]);
-            else { const dl = dailyAdvice(it).find(x => x.includes('Tagesdosis von')); if (dl) line = dl.split('. Das ändert')[0]; }
+            else { const dl = dailyAdvice(it).find(x => /(Tagesdosis|Gabe) von/.test(x)); if (dl) line = dl.split('. Das ändert')[0]; }
             if (!line) return;
             if (!confirm('Maßnahme eintragen?\n\n' + line)) return;
             const d = new Date();
@@ -2155,6 +2215,12 @@
 
         function setProduct(slot, field, v) {
             const p = appSettings.products[slot] || (appSettings.products[slot] = {});
+            if (field === 'mode') {
+                if (v === 'once') p.mode = 'once'; else delete p.mode;
+                saveSettings(); seedDosing(); renderProductSettings(); renderDoseChart();
+                if (typeof renderRecommendations === 'function') renderRecommendations();
+                return;
+            }
             if (field === 'name' || field === 'unit') p[field] = String(v).trim();
             else {
                 const n = parseFloat(String(v).replace(',', '.'));
@@ -2170,7 +2236,7 @@
         const DOSE_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
         let doseRange = 30, doseSel = new Set(DOSE_PARAMS), doseHover = null;
         function logDose(slot, v) {
-            const last = dosingLog.filter(e => e.slot === slot).sort((a, b) => a.ts - b.ts).pop();
+            const last = dosingLog.filter(e => e.slot === slot && !e.kind).sort((a, b) => a.ts - b.ts).pop();
             if (last ? last.v === v : v === 0) return;
             dosingLog.push({ ts: Date.now(), slot, v });
             saveDosing();
@@ -2179,7 +2245,7 @@
             let ch = false;
             DOSE_PARAMS.forEach(k => {
                 const slot = k + '_up', p = appSettings.products && appSettings.products[slot];
-                if (p && p.daily > 0 && !dosingLog.some(e => e.slot === slot)) { dosingLog.push({ ts: Date.now(), slot, v: p.daily }); ch = true; }
+                if (p && p.mode !== 'once' && p.daily > 0 && !dosingLog.some(e => e.slot === slot && !e.kind)) { dosingLog.push({ ts: Date.now(), slot, v: p.daily }); ch = true; }
             });
             if (ch) saveDosing();
         }
@@ -2187,11 +2253,26 @@
         function toggleDoseParam(k) { if (doseSel.has(k)) doseSel.delete(k); else doseSel.add(k); doseHover = null; renderDoseChart(); }
         // Die erste Eingabe gilt ab dem Tag selbst (die Dosierung lief ja schon), jede spätere Änderung ab dem Folgetag
         function doseEvents(k) {
-            return dosingLog.filter(e => e.slot === k + '_up').sort((a, b) => a.ts - b.ts)
+            return dosingLog.filter(e => e.slot === k + '_up' && !e.kind).sort((a, b) => a.ts - b.ts)
                 .map((e, i) => Object.assign({}, e, { eff: startOfDay(e.ts) + (i === 0 ? 0 : DAY_MS) }));
         }
         function doseValueAt(k, ts) { let v = null; doseEvents(k).forEach(e => { if (e.eff <= ts) v = e; }); return v; }
         function doseUnit(k) { const p = appSettings.products && appSettings.products[k + '_up']; return (p && p.unit) || 'ml'; }
+        function isoToday() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+        function addGabe(slot) {
+            const di = document.getElementById('gd_' + slot), ai = document.getElementById('ga_' + slot);
+            const n = parseFloat(String(ai.value).replace(',', '.'));
+            if (!(n > 0)) { alert('Bitte eine Menge größer als 0 eingeben.'); return; }
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(di.value || isoToday());
+            const ts = new Date(+m[1], +m[2] - 1, +m[3], 12).getTime();
+            dosingLog.push({ ts, slot, v: n, kind: 'once' });
+            saveDosing(); renderProductSettings(); renderDoseChart();
+            if (typeof renderRecommendations === 'function') renderRecommendations();
+        }
+        function deleteGabe(i) {
+            dosingLog.splice(i, 1); saveDosing(); renderProductSettings(); renderDoseChart();
+            if (typeof renderRecommendations === 'function') renderRecommendations();
+        }
         function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
 
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
@@ -2218,6 +2299,12 @@
             series.forEach(sr => {
                 const col = paramColors[sr.k];
                 const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                if (sr.bars) {
+                    const bwid = Math.max(3, Math.min(18, pw / Math.max(1, (to - from) / DAY_MS) * 0.7));
+                    ctx.fillStyle = col;
+                    sr.pts.forEach(q => { const yy = yv(q.v); ctx.fillRect(X(q.ts) - bwid / 2, yy, bwid, T + ph - yy); });
+                    return;
+                }
                 ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
                 ctx.beginPath();
                 sr.pts.forEach((q, i) => {
@@ -2237,6 +2324,11 @@
                 ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
                 const rows = [];
                 series.forEach(sr => {
+                    if (sr.bars) {
+                        const dd = startOfDay(hover), q = sr.pts.find(z => startOfDay(z.ts) === dd);
+                        rows.push({ dot: paramColors[sr.k], text: `${thresholds[sr.k].label}: ${q ? fmtNum(q.v) + ' ' + doseUnit(sr.k) + ' Einmal-Gabe' : 'keine Gabe an diesem Tag'}` });
+                        return;
+                    }
                     const e = doseValueAt(sr.k, hover);
                     if (!e) return;
                     const sd = new Date(e.eff);
@@ -2272,6 +2364,14 @@
             const to = Date.now(), from = to - days * DAY_MS, series = [];
             DOSE_PARAMS.forEach(k => {
                 if (!sel.has(k)) return;
+                const pp = (appSettings.products && appSettings.products[k + '_up']) || {};
+                if (pp.mode === 'once') {
+                    const m = {};
+                    dosingLog.forEach(e => { if (e.kind === 'once' && e.slot === k + '_up') { const dd = startOfDay(e.ts); m[dd] = (m[dd] || 0) + e.v; } });
+                    const bp = Object.keys(m).map(Number).filter(dd => dd + DAY_MS > from && dd <= to).sort((a, b) => a - b).map(dd => ({ ts: dd + DAY_MS / 2, v: m[dd] }));
+                    if (bp.length) series.push({ k, pts: bp, max: Math.max(...bp.map(q => q.v)), bars: true });
+                    return;
+                }
                 const ev = doseEvents(k); if (!ev.length) return;
                 let pts = [], before = null;
                 ev.forEach(e => { if (e.eff <= from) before = e; });
@@ -2295,7 +2395,7 @@
             document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
                 const k = e.slot.split('_')[0], d = new Date(e.ts);
                 const p = appSettings.products[e.slot] || {};
-                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())} · ${e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung'}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${e.kind === 'once' ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
             }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
 
             const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
@@ -2310,7 +2410,7 @@
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
                 ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
-                : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis ein, dann entsteht hier dein Verlauf.';
+                : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
         let doseLayout = null;
@@ -2349,10 +2449,23 @@
                             <span>Litern</span>
                         </div>
                         ${(DAILY_PARAMS.includes(k) && dir === 'up') ? `<div class="prod-line">
+                            <span>Dosierart:</span>
+                            <select class="input-styled" onchange="setProduct('${slot}','mode',this.value)">
+                                <option value="daily"${p.mode === 'once' ? '' : ' selected'}>Tagesdosis (läuft täglich weiter)</option>
+                                <option value="once"${p.mode === 'once' ? ' selected' : ''}>Einmal-Gabe (ich trage jede Gabe ein)</option>
+                            </select>
+                        </div>` + (p.mode === 'once' ? `<div class="prod-line">
+                            <span>Gabe am</span>
+                            <input type="date" id="gd_${slot}" class="input-styled" value="${isoToday()}">
+                            <input type="number" step="any" inputmode="decimal" id="ga_${slot}" class="input-styled" placeholder="Menge">
+                            <span>${escapeHtml(p.unit || 'ml')}</span>
+                            <button type="button" class="btn-note save" onclick="addGabe('${slot}')">➕ Eintragen</button>
+                        </div>
+                        ${dosingLog.map((e, i) => ({ e, i })).filter(x => x.e.kind === 'once' && x.e.slot === slot).sort((a, b) => b.e.ts - a.e.ts).slice(0, 5).map(({ e, i }) => { const d = new Date(e.ts); return `<div class="rem-row" style="justify-content:space-between;"><span>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} · ${fmtNum(e.v)} ${escapeHtml(p.unit || 'ml')}</span><button type="button" class="thr-link" onclick="deleteGabe(${i})">löschen</button></div>`; }).join('') || '<div class="rec-meta">Noch keine Gabe eingetragen.</div>'}` : `<div class="prod-line">
                             <span>Meine Tagesdosis:</span>
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onchange="setProduct('${slot}','daily',this.value)">
                             <span>${escapeHtml(p.unit || 'ml')} pro Tag (für dein Nettovolumen)</span>
-                        </div>` : ''}
+                        </div>`) : ''}
                     </div>`;
                 });
             });
@@ -2528,10 +2641,15 @@
                 const nowTs = Date.now();
                 const rowsD = [];
                 DOSE_PARAMS.forEach(k => {
+                    const p = (appSettings.products && appSettings.products[k + '_up']) || {};
+                    if (p.mode === 'once') {
+                        const g = lastGabe(k + '_up');
+                        if (g) rowsD.push({ k, p, cur: { v: g.v, eff: g.ts, once: true }, next: null });
+                        return;
+                    }
                     const ev = doseEvents(k); if (!ev.length) return;
                     const cur = doseValueAt(k, nowTs);
                     const next = ev.find(e => e.eff > nowTs);
-                    const p = (appSettings.products && appSettings.products[k + '_up']) || {};
                     rowsD.push({ k, p, cur, next });
                 });
                 if (rowsD.length) {
@@ -2546,7 +2664,7 @@
                         text(dc[0] + 3, y - 10, thresholds[r.k].label, 9.5, 'F2');
                         text(dc[1] + 3, y - 10, (r.p.name || '-').slice(0, 30), 9);
                         const u = r.p.unit || 'ml';
-                        text(dc[2] + 3, y - 10, r.cur ? (r.cur.v > 0 ? `${num(r.cur.v)} ${u} pro Tag` : 'keine Dosierung') : '-', 9.5, 'F2');
+                        text(dc[2] + 3, y - 10, r.cur ? (r.cur.v > 0 ? `${num(r.cur.v)} ${u} ${r.cur.once ? '(letzte Einmal-Gabe)' : 'pro Tag'}` : 'keine Dosierung') : '-', 9.5, 'F2');
                         text(dc[3] + 3, y - 10, r.cur ? fd(r.cur.eff) + (r.next ? `  (ab ${fd(r.next.eff)}: ${num(r.next.v)} ${u})` : '') : '-', 9);
                         hline(y - 14);
                         y -= 17;
@@ -2585,7 +2703,7 @@
                 const { series, from, to } = doseSeriesFor(doseRange, doseSel);
                 const log = dosingLog.filter(e => e.slot).slice().sort((a, b) => a.ts - b.ts);
                 if (series.length || log.length) {
-                    heading('Dosierverlauf (Tagesdosis)');
+                    heading('Dosierverlauf');
                     if (series.length) {
                         const lw = 520, lh = 230, sc = 2;
                         const tmp = document.createElement('canvas');
@@ -2606,7 +2724,7 @@
                     }
                     if (log.length) {
                         ensure(30);
-                        text(M, y - 9, 'Änderungen der Tagesdosis (gilt jeweils ab dem Folgetag)', 9.5, 'F2');
+                        text(M, y - 9, 'Dosierungen (Tagesdosis-Änderungen gelten ab dem Folgetag, Einmal-Gaben am Tag der Gabe)', 9.5, 'F2');
                         y -= 18;
                         const lc = [M, M + 85, M + 185, M + 355];
                         rect(M, y - 13, W - 2 * M, 16, '0.92 0.94 0.96 rg');
@@ -2619,7 +2737,7 @@
                             text(lc[0] + 3, y - 9, `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`, 9);
                             text(lc[1] + 3, y - 9, thresholds[k] ? thresholds[k].label : k, 9, 'F2');
                             text(lc[2] + 3, y - 9, (p.name || '-').slice(0, 32), 9);
-                            text(lc[3] + 3, y - 9, e.v > 0 ? `${num(e.v)} ${p.unit || 'ml'} pro Tag` : 'keine Dosierung', 9);
+                            text(lc[3] + 3, y - 9, e.kind === 'once' ? `${num(e.v)} ${p.unit || 'ml'} Einmal-Gabe` : (e.v > 0 ? `${num(e.v)} ${p.unit || 'ml'} pro Tag` : 'keine Dosierung'), 9);
                             hline(y - 12);
                             y -= 15;
                         });
