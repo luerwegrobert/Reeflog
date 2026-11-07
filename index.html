@@ -1258,7 +1258,7 @@
                 .filter(q => isFinite(q.v) && q.ts <= now + 3600000).sort((a, b) => a.ts - b.ts);
             if (!all.length) return `<div class="spark-wrap"><div class="spark-empty">noch keine Messung</div></div>`;
             let pts = all.filter(q => q.ts >= now - 7 * DAY_MS);
-            const extended = pts.length < 2 && all.length >= 2;
+            const extended = pts.length < 2 && !(pts.length === 1 && all.length === 1);
             let from = now - 7 * DAY_MS, to = now;
             if (extended) { pts = all.slice(-6); from = pts[0].ts - DAY_MS * 0.5; to = Math.max(now, pts[pts.length - 1].ts); }
             const vs = pts.map(q => q.v), dmin = Math.min(...vs), dmax = Math.max(...vs);
@@ -1330,7 +1330,7 @@
                 const stat = getStatusColorClass(param, val);
                 const meta = latestMeta[param];
                 const cfg = thresholds[param];
-                const spark = sparkSvg(param, stat.color);
+                let spark = ''; try { spark = sparkSvg(param, stat.color); } catch (e) { console.error(e); }
                 
                 let cardHtml = `
                     <div class="param-card ${param}">
