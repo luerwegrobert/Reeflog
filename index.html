@@ -1287,14 +1287,10 @@
             const u = cfg.unit ? ' ' + cfg.unit : '';
             let trend, detail;
             if (pts.length > 1) {
-                // Trend: Ausgleichsgerade durch alle Messungen im Zeitraum (nicht nur die letzten zwei)
-                const n = pts.length, mt = pts.reduce((x, q) => x + q.ts, 0) / n, mv = avg;
-                let sxx = 0, sxy = 0; pts.forEach(q => { sxx += (q.ts - mt) * (q.ts - mt); sxy += (q.ts - mt) * (q.v - mv); });
-                const slope = sxx > 0 ? sxy / sxx : 0;
-                let prev = slope * (pts[n - 1].ts - pts[0].ts);
-                const pp = Math.pow(10, Math.min(3, decs + 1)); prev = Math.round(prev * pp) / pp;
-                trend = `${ar(prev)} ${sg(prev)}${fmtNum(Math.abs(prev))}${u} Trend`;
-                detail = `Ø ${rd(avg)} · ${rd(dmin)}–${rd(dmax)}`;
+                // Veränderung: letzter Wert gegenüber dem Vorwert
+                const prev = Math.round((vs[vs.length - 1] - vs[vs.length - 2]) * 1000) / 1000;
+                trend = `${ar(prev)} ${sg(prev)}${fmtNum(Math.abs(prev))}${u}`;
+                detail = extended ? `Ø ${rd(avg)}` : `Ø 7 Tage: ${rd(avg)}`;
                 if (extended) { const f2 = t => { const dd = new Date(t); return pad2(dd.getDate()) + '.' + pad2(dd.getMonth() + 1) + '.'; }; detail += `</div><div class="spark-cap">Verlauf ${f2(pts[0].ts)}–${f2(pts[pts.length - 1].ts)}`; }
             } else { trend = '1 Messung'; detail = extended ? '' : '7 Tage'; }
             const grid = extended ? '' : [1, 2, 3, 4, 5, 6].map(i => { const gx = (3 + i / 7 * 94).toFixed(2); return `<path d="M${gx} 0 V${H}" stroke="rgba(255,255,255,0.06)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
