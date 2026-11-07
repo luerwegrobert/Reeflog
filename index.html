@@ -208,8 +208,8 @@
         }
 
         .spark-wrap { margin-top: 6px; }
-        .spark { width: 100%; height: 30px; display: block; }
-        .spark-cap, .spark-empty { font-size: 0.6rem; color: var(--text-muted); margin-top: 1px; }
+        .spark { width: 100%; height: 44px; display: block; }
+        .spark-cap, .spark-empty { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
         .spark-empty { padding: 8px 0 0; }
         .param-card.sal { border-left-color: var(--color-sal); }
         .param-card.kh { border-left-color: var(--color-kh); }
@@ -1257,17 +1257,38 @@
             const pts = records.map(r => ({ ts: recTs(r), v: parseFloat(r.values && r.values[param]) }))
                 .filter(q => isFinite(q.v) && q.ts >= from && q.ts <= to + 3600000).sort((a, b) => a.ts - b.ts);
             if (!pts.length) return `<div class="spark-wrap"><div class="spark-empty">keine Messung in 7 Tagen</div></div>`;
-            let lo = Math.min(cfg.minOpt, ...pts.map(q => q.v)), hi = Math.max(cfg.maxOpt, ...pts.map(q => q.v));
-            const pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
-            const X = t => 2 + (t - from) / (to - from) * 96, Y = v => 28 - (v - lo) / (hi - lo) * 26;
-            const bandTop = Y(cfg.maxOpt), bandH = Y(cfg.minOpt) - bandTop;
-            let path = pts.map((q, i) => (i ? 'L' : 'M') + X(q.ts).toFixed(2) + ' ' + Y(q.v).toFixed(2)).join(' ');
-            const lastP = pts[pts.length - 1];
-            return `<div class="spark-wrap"><svg viewBox="0 0 100 30" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
-                <rect x="0" y="${bandTop.toFixed(2)}" width="100" height="${bandH.toFixed(2)}" fill="rgba(0,255,135,0.12)"/>
-                ${pts.length > 1 ? `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : ''}
-                <path d="M${X(lastP.ts).toFixed(2)} ${Y(lastP.v).toFixed(2)} h0.01" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-            </svg><div class="spark-cap">7 Tage</div></div>`;
+            const vs = pts.map(q => q.v), dmin = Math.min(...vs), dmax = Math.max(...vs);
+            const minSpan = (cfg.maxOpt - cfg.minOpt) * 0.35;
+            let lo = dmin, hi = dmax;
+            if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
+            const pd = (hi - lo) * 0.15; lo -= pd; hi += pd;
+            const H = 40, X = t => 3 + (t - from) / (to - from) * 94, Y = v => H - 4 - (v - lo) / (hi - lo) * (H - 8);
+            const P = pts.map(q => [X(q.ts), Y(q.v)]);
+            let d = 'M' + P[0][0].toFixed(2) + ' ' + P[0][1].toFixed(2);
+            for (let i = 0; i < P.length - 1; i++) {
+                const p0 = P[Math.max(i - 1, 0)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(i + 2, P.length - 1)];
+                const ymin = Math.min(p1[1], p2[1]), ymax = Math.max(p1[1], p2[1]);
+                const cl = y => Math.min(Math.max(y, ymin), ymax);
+                const c1 = [p1[0] + (p2[0] - p0[0]) / 6, cl(p1[1] + (p2[1] - p0[1]) / 6)];
+                const c2 = [p2[0] - (p3[0] - p1[0]) / 6, cl(p2[1] - (p3[1] - p1[1]) / 6)];
+                d += ` C${c1[0].toFixed(2)} ${c1[1].toFixed(2)} ${c2[0].toFixed(2)} ${c2[1].toFixed(2)} ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+            }
+            const last = P[P.length - 1], first = P[0];
+            const area = `${d} L${last[0].toFixed(2)} ${H} L${first[0].toFixed(2)} ${H} Z`;
+            const bt = Math.max(0, Math.min(H, Y(cfg.maxOpt))), bb = Math.max(0, Math.min(H, Y(cfg.minOpt)));
+            const gid = 'sg_' + param;
+            let trend = '';
+            if (pts.length > 1) {
+                const dv = pts[pts.length - 1].v - pts[0].v, r = Math.round(dv * 1000) / 1000;
+                const arrow = r > 0 ? '↗' : r < 0 ? '↘' : '→';
+                trend = `${arrow} ${r > 0 ? '+' : r < 0 ? '−' : '±'}${fmtNum(Math.abs(r))}${cfg.unit ? ' ' + cfg.unit : ''} · 7 Tage`;
+            } else trend = '1 Messung · 7 Tage';
+            return `<div class="spark-wrap"><svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" class="spark" role="img" aria-label="Verlauf der letzten 7 Tage: ${cfg.label}">
+                <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.35"/><stop offset="1" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
+                <rect x="0" y="${bt.toFixed(2)}" width="100" height="${Math.max(0, bb - bt).toFixed(2)}" fill="rgba(0,255,135,0.08)"/>
+                ${pts.length > 1 ? `<path d="${area}" fill="url(#${gid})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : ''}
+                <path d="M${last[0].toFixed(2)} ${last[1].toFixed(2)} h0.01" stroke="${color}" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            </svg><div class="spark-cap" style="color:${color};">${trend}</div></div>`;
         }
         function renderDashboard() {
             const grid = document.getElementById('dashboardValues');
