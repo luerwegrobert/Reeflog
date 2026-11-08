@@ -1302,7 +1302,7 @@
             renderDashboard(); renderHistoryTable(); updateChart(); renderRecommendations();
         }
         function openDetail(k) {
-            detailK = k; detailEdit = null;
+            detailK = k; detailEdit = null; detailMsg = '';
             document.getElementById('detailModal').style.display = 'block';
             document.body.style.overflow = 'hidden';
             renderDetail();
@@ -1357,6 +1357,37 @@
             detailEdit = null; persistRecords(); renderDetail();
         }
         function detailThr(f, v) { setThr(detailK, f, v); }
+        let detailMsg = '';
+        const DEF_PH = { kh: 'z. B. 7,5', sal: 'z. B. 35', ca: 'z. B. 420', mg: 'z. B. 1350', no3: 'z. B. 5', po4: 'z. B. 0,04', temp: 'z. B. 25', ph: 'z. B. 8,2' };
+        function detailNewPrev() {
+            const k = detailK, sel = document.getElementById('dn_m'), inp = document.getElementById('dn_v'), prev = document.getElementById('dn_p');
+            const m = methodOf(k, sel.value);
+            inp.placeholder = m.ph || DEF_PH[k];
+            prev.classList.remove('err');
+            if (!m.conv) { prev.textContent = ''; return; }
+            if (inp.value === '') { prev.textContent = m.inLabel ? 'Eingabe: ' + m.inLabel : ''; return; }
+            const c = convertRaw(k, sel.value, inp.value);
+            if (c.error) { prev.textContent = c.error; prev.classList.add('err'); return; }
+            prev.textContent = `${m.inLabel}: ${inp.value} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
+        }
+        function detailNewMethod() { methodMemory[detailK] = document.getElementById('dn_m').value; saveMethodMemory(); detailNewPrev(); }
+        function detailNewSave() {
+            const k = detailK, mid = document.getElementById('dn_m').value, rv = document.getElementById('dn_v').value;
+            const dt = document.getElementById('dn_d').value, tm = document.getElementById('dn_t').value;
+            if (rv === '') { alert('Bitte einen Wert eingeben.'); return; }
+            if (!dt) { alert('Bitte ein Datum angeben.'); return; }
+            const c = convertRaw(k, mid, rv);
+            if (c.error) { alert(thresholds[k].label + ': ' + c.error); return; }
+            const m = methodOf(k, mid);
+            const values = {}; Object.keys(thresholds).forEach(x => { values[x] = null; });
+            values[k] = String(c.value);
+            const rec = { id: Date.now(), date: dt, time: tm || '', type: 'Heimtest', procedure: m.label, icpUrl: '', note: '', values, methods: { [k]: m.label } };
+            if (c.converted) rec.raw = { [k]: rv };
+            methodMemory[k] = mid; saveMethodMemory();
+            records.push(rec);
+            detailMsg = `✅ ${thresholds[k].label} ${fmtNum(c.value)}${thresholds[k].unit ? ' ' + thresholds[k].unit : ''} eingetragen.`;
+            persistRecords(); renderDetail();
+        }
         function renderDetail() {
             const k = detailK; if (!k) return;
             const cfg = thresholds[k], lv = latestValue(k), col = paramColors[k];
@@ -1384,6 +1415,12 @@
                 </div>
                 <div style="font-size:2rem;font-weight:800;color:${st ? st.color : '#fff'};">${lv ? fmtNum(lv.v) : '–'}<span style="font-size:1rem;color:var(--text-muted);">${unit}</span> ${st && st.label ? `<span class="status-badge ${st.badge}" style="vertical-align:middle;">${st.label}</span>` : ''}</div>
                 <div class="rec-meta" style="margin-bottom:12px;">Soll: ${fmtNum(e.minOpt)}–${fmtNum(e.maxOpt)}${unit}${lv ? ' · gemessen ' + lv.date.split('-').reverse().join('.') + (lv.time ? ' ' + lv.time : '') : ''}</div>
+                <div class="detail-h">Neue Messung eintragen</div>
+                <div class="form-group"><select id="dn_m" class="input-styled meth-sel" onchange="detailNewMethod()">${METHODS[k].map(x => `<option value="${x.id}"${x.id === methodOf(k, methodMemory[k] || METHODS[k][0].id).id ? ' selected' : ''}>${x.label}</option>`).join('')}</select></div>
+                <div class="form-group"><input type="number" step="any" inputmode="decimal" id="dn_v" class="input-styled" placeholder="${methodOf(k, methodMemory[k] || METHODS[k][0].id).ph || DEF_PH[k]}" oninput="detailNewPrev()"><div class="val-prev" id="dn_p"></div></div>
+                <div class="form-row-grid"><div class="form-group"><input type="date" id="dn_d" class="input-styled" value="${isoToday()}"></div><div class="form-group"><input type="time" id="dn_t" class="input-styled" value="${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}"></div></div>
+                <button type="button" class="btn-submit" onclick="detailNewSave()">💾 Eintragen</button>
+                ${detailMsg ? `<div class="rec-meta" style="color:var(--status-green);margin-top:6px;">${detailMsg}</div>` : ''}
                 <div class="detail-h">Verlauf</div>${detailChart(k)}
                 <div class="detail-h">Letzte Messungen</div>${rowHtml}
                 <div class="detail-h">Sollwerte</div>${thrInline}
