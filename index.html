@@ -937,6 +937,12 @@
                     <div class="form-group" id="icpUrlGroup" style="display: none;">
                         <label for="icpUrl">ICP Ergebnis Web-Link (Optional)</label>
                         <input type="url" id="icpUrl" class="input-styled" placeholder="https://results.faunamarin.de/...">
+                        <div style="margin-top:10px;">
+                            <label>ICP-Bericht als PDF einlesen (ATI, Fauna Marin)</label>
+                            <button type="button" class="btn-note save" style="margin-top:4px;" onclick="document.getElementById('icpPdf').click()">📄 PDF auswählen</button>
+                            <input type="file" id="icpPdf" accept="application/pdf,.pdf" style="display:none" onchange="onIcpPdf(this)">
+                            <div id="icpImportMsg" style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;"></div>
+                        </div>
                     </div>
 
                     <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 5px;"></div>
@@ -1192,6 +1198,96 @@
             } else {
                 return { text: val + " " + cfg.unit, color: 'var(--status-red)', badge: 'badge-red', label: 'Kritisch' };
             }
+        }
+
+        // ===== ICP-PDF einlesen (ATI Lab, Fauna Marin) =====
+        let pdfjsLib = null;
+        async function loadPdfJs() {
+            if (pdfjsLib) return pdfjsLib;
+            const m = await import('./pdf.min.mjs');
+            m.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', document.baseURI).href;
+            pdfjsLib = m; return m;
+        }
+        async function pdfLines(buf) {
+            const lib = await loadPdfJs();
+            const pdf = await lib.getDocument({ data: buf }).promise;
+            const lines = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const tc = await (await pdf.getPage(p)).getTextContent();
+                const rows = [];
+                tc.items.forEach(it => {
+                    if (!it.str || !it.str.trim()) return;
+                    const y = it.transform[5], x = it.transform[4];
+                    let row = rows.find(r => Math.abs(r.y - y) < 2.5);
+                    if (!row) { row = { y, items: [] }; rows.push(row); }
+                    row.items.push({ x, s: it.str });
+                });
+                rows.sort((a, b) => b.y - a.y).forEach(r => {
+                    lines.push(r.items.sort((a, b) => a.x - b.x).map(i => i.s.trim()).join(' ').replace(/\s+/g, ' ').trim());
+                });
+            }
+            return lines;
+        }
+        function parseIcp(lines) {
+            const txt = lines.join('\n');
+            const num = x => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? String(n) : null; };
+            const v = {}, firstDec = rest => { const t = rest.split(' ').find(z => /^\d+[.,]\d+$/.test(z)); return t ? num(t) : null; };
+            let lab = null, date = null, id = null;
+            const iso = d => { const m = /(\d{2})\.(\d{2})\.(\d{4})/.exec(d); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+            if (/atiaquaristik|ATI Aquaristik/i.test(txt) && /Idealwert/.test(txt)) {
+                lab = 'ATI Labor';
+                const i = lines.findIndex(l => /Erstellt/.test(l) && /Ausgewertet/.test(l));
+                if (i >= 0) { const d = (lines.slice(i + 1, i + 3).join(' ').match(/\d{2}\.\d{2}\.\d{4}/) || [])[0]; date = d ? iso(d) : null; }
+                const mi = /ID:\s*(\d+)/.exec(txt); id = mi ? mi[1] : null;
+                const rule = (k, re) => { for (const l of lines) { const m = re.exec(l); if (m) { v[k] = num(m[1]); return; } } };
+                rule('sal', /^Sal\.?\s*total\s+([\d.,]+)\s*PSU/i);
+                rule('kh', /^KH\s+([\d.,]+)\s*°?\s*dKH/i);
+                rule('mg', /^Mg\s+([\d.,]+)\s*mg\/l/i);
+                rule('ca', /^Ca\s+([\d.,]+)\s*mg\/l/i);
+                rule('no3', /^NO\s?3\s+([\d.,]+)\s*mg\/l/i);
+                rule('po4', /^PO\s?4\s+([\d.,]+)\s*mg\/l/i);
+            } else if (/Analysen\s*ID/i.test(txt) && /Referenzbereich/i.test(txt)) {
+                lab = 'Fauna Marin Lab';
+                const md = /Entnahmedatum:?\s*(\d{2}\.\d{2}\.\d{4})/.exec(txt); date = md ? iso(md[1]) : null;
+                const mi = /Analysen\s*ID:?\s*(\d+)/i.exec(txt); id = mi ? mi[1] : null;
+                const rule = (k, re) => { for (const l of lines) { const m = re.exec(l); if (m) { v[k] = num(m[1]); return; } } };
+                rule('sal', /^Salinität \(psu[^)]*\)\s+([\d.,]+)/i);
+                rule('ph', /^pH-Wert\s+([\d.,]+)/i);
+                rule('kh', /^Karbonathärte[^\d]*\s([\d.,]+)/i);
+                rule('mg', /^Magnesium\s+Mg\s+([\d.,]+)/);
+                rule('ca', /^Calcium\s+Ca\s+([\d.,]+)/);
+                for (const l of lines) { if (/^Nitrat\s+NO/.test(l)) { const r = firstDec(l.replace(/^Nitrat/, '')); if (r) { v.no3 = r; break; } } }
+                for (const l of lines) { if (/^ortho-Phosphat\s*\(/i.test(l) && !/:/.test(l)) { const r = firstDec(l.replace(/^ortho-Phosphat/i, '')); if (r) { v.po4 = r; break; } } }
+            }
+            return { lab, date, id, values: v };
+        }
+        async function onIcpPdf(inp) {
+            const f = inp.files && inp.files[0], msg = document.getElementById('icpImportMsg');
+            if (!f) return;
+            msg.style.color = 'var(--text-muted)'; msg.textContent = 'PDF wird gelesen …';
+            try {
+                const lines = await pdfLines(await f.arrayBuffer());
+                const r = parseIcp(lines);
+                if (!r.lab) throw new Error('Der Bericht wurde nicht erkannt. Unterstützt: ATI Lab und Fauna Marin (PDF mit Text).');
+                const keys = Object.keys(r.values).filter(k => r.values[k] !== null);
+                if (!keys.length) throw new Error('Es wurden keine Werte gefunden.');
+                if (currentRecordType !== 'ICP-Analyse') setRecordType('ICP-Analyse');
+                document.getElementById('testProcedure').value = r.lab;
+                if (r.date) document.getElementById('testDate').value = r.date;
+                document.getElementById('testTime').value = '';
+                Object.keys(thresholds).forEach(k => { const i = document.getElementById('val_' + k); if (i) i.value = r.values[k] !== undefined && r.values[k] !== null ? r.values[k] : ''; onRawInput(k); });
+                const note = document.getElementById('testNote');
+                const tag = `ICP-Import ${r.lab}${r.id ? ' (ID ' + r.id + ')' : ''}`;
+                if (!note.value.includes(tag)) note.value = (note.value ? note.value + '\n' : '') + tag;
+                const miss = Object.keys(thresholds).filter(k => !keys.includes(k)).map(k => thresholds[k].label);
+                msg.style.color = 'var(--status-green)';
+                msg.innerHTML = `✅ ${escapeHtml(r.lab)}${r.date ? ', Datum ' + r.date.split('-').reverse().join('.') : ' (Datum nicht gefunden, bitte oben eintragen)'}: ${keys.map(k => thresholds[k].label + ' ' + r.values[k].replace('.', ',')).join(', ')}.${miss.length ? '<br><span style="color:var(--text-muted)">Nicht im Bericht: ' + miss.join(', ') + '.</span>' : ''}<br><span style="color:var(--text-muted)">Bitte prüfen und unten „Werte sicher dokumentieren“ tippen.</span>`;
+            } catch (e) {
+                console.error(e);
+                msg.style.color = 'var(--status-red)';
+                msg.textContent = '⚠️ ' + (e && e.message && !/import|module|fetch/i.test(e.message) ? e.message : 'Das PDF konnte nicht gelesen werden. Das Einlesen funktioniert in der installierten App bzw. über den Web-Link, nicht in einer lokal geöffneten Datei.');
+            }
+            inp.value = '';
         }
 
         function saveRecord(e) {
