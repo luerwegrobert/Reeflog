@@ -2508,7 +2508,7 @@
         const DOSE_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
         let doseRange = 30, doseSel = new Set(DOSE_PARAMS), doseHover = null;
         function logDose(slot, v) {
-            const last = dosingLog.filter(e => e.slot === slot && !e.kind).sort((a, b) => a.ts - b.ts).pop();
+            const last = doseEvents(slot.split('_')[0]).pop();
             if (last ? last.v === v : v === 0) return;
             dosingLog.push({ ts: Date.now(), slot, v });
             saveDosing();
@@ -2526,7 +2526,8 @@
         // Die erste Eingabe gilt ab dem Tag selbst (die Dosierung lief ja schon), jede spätere Änderung ab dem Folgetag
         function doseEvents(k) {
             return dosingLog.filter(e => e.slot === k + '_up' && !e.kind).sort((a, b) => a.ts - b.ts)
-                .map((e, i) => Object.assign({}, e, { eff: startOfDay(e.ts) + (i === 0 ? 0 : DAY_MS) }));
+                .map((e, i) => Object.assign({}, e, { eff: e.eff !== undefined ? e.eff : startOfDay(e.ts) + (i === 0 ? 0 : DAY_MS) }))
+                .sort((a, b) => a.eff - b.eff);
         }
         function doseValueAt(k, ts) { let v = null; doseEvents(k).forEach(e => { if (e.eff <= ts) v = e; }); return v; }
         function doseUnit(k) { const p = appSettings.products && appSettings.products[k + '_up']; return (p && p.unit) || 'ml'; }
@@ -2545,7 +2546,32 @@
             dosingLog.splice(i, 1); saveDosing(); renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
         }
-        function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
+        function deleteDose(i) {
+            const slot = dosingLog[i] && dosingLog[i].slot;
+            dosingLog.splice(i, 1); saveDosing();
+            const k = slot && slot.split('_')[0], p = slot && appSettings.products && appSettings.products[slot];
+            if (p && p.mode !== 'once' && dosingLog.some(e => e.slot === slot && !e.kind)) { p.daily = doseEvents(k).pop().v; saveSettings(); renderProductSettings(); if (typeof renderRecommendations === 'function') renderRecommendations(); }
+            renderDoseChart();
+        }
+        // Tagesdosis rückwirkend (oder für einen bestimmten Tag) nachtragen: gilt ab dem gewählten Tag
+        function addDailyFrom(slot) {
+            const k = slot.split('_')[0], di = document.getElementById('rd_' + slot), vi = document.getElementById('rv_' + slot);
+            const n = parseFloat(String(vi.value).replace(',', '.'));
+            if (!(n >= 0) || vi.value === '') { alert('Bitte eine Menge eingeben (0 = keine Dosierung).'); return; }
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(di.value || '');
+            if (!m) { alert('Bitte ein Datum wählen.'); return; }
+            const day = new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+            // bestehende Einträge festschreiben, damit ihr Gültigkeitsbeginn gleich bleibt
+            const evs = doseEvents(k);
+            dosingLog.filter(e => e.slot === slot && !e.kind && e.eff === undefined).forEach(e => { const f = evs.find(x => x.ts === e.ts && x.v === e.v); if (f) e.eff = f.eff; });
+            dosingLog = dosingLog.filter(e => !(e.slot === slot && !e.kind && e.eff === day));
+            dosingLog.push({ ts: day + DAY_MS / 2, slot, v: n, eff: day });
+            const p = appSettings.products[slot];
+            if (p && p.mode !== 'once') p.daily = doseEvents(k).pop().v;
+            saveDosing(); saveSettings();
+            renderProductSettings(); renderDoseChart();
+            if (typeof renderRecommendations === 'function') renderRecommendations();
+        }
 
         // gemeinsame Mengenachse nur, wenn Einheit gleich und Größenordnung ähnlich (sonst Prozent)
         function doseMode(series) {
@@ -2690,7 +2716,7 @@
             document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
                 const k = e.slot.split('_')[0], d = new Date(e.ts);
                 const p = appSettings.products[e.slot] || {};
-                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${e.kind === 'once' ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${(e.kind === 'once' || e.eff !== undefined) ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' + (e.eff !== undefined ? ' (ab diesem Tag)' : '') : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
             }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
 
             const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
@@ -2760,7 +2786,15 @@
                             <span>Meine Tagesdosis:</span>
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onchange="setProduct('${slot}','daily',this.value)">
                             <span>${escapeHtml(p.unit || 'ml')} pro Tag (für dein Nettovolumen)</span>
-                        </div>`) : ''}
+                        </div>
+                        <div class="prod-line">
+                            <span>Nachtragen ab</span>
+                            <input type="date" id="rd_${slot}" class="input-styled" value="${isoToday()}">
+                            <input type="number" step="any" inputmode="decimal" id="rv_${slot}" class="input-styled" placeholder="Menge">
+                            <span>${escapeHtml(p.unit || 'ml')}</span>
+                            <button type="button" class="btn-note save" onclick="addDailyFrom('${slot}')">➕ Eintragen</button>
+                        </div>
+                        <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`) : ''}
                     </div>`;
                 });
             });
