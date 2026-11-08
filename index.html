@@ -2544,9 +2544,11 @@
                 const col = paramColors[sr.k];
                 const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
                 if (sr.bars) {
-                    const bwid = Math.max(3, Math.min(18, pw / Math.max(1, (to - from) / DAY_MS) * 0.7));
-                    ctx.fillStyle = col;
-                    sr.pts.forEach(q => { const yy = yv(q.v); ctx.fillRect(X(q.ts) - bwid / 2, yy, bwid, T + ph - yy); });
+                    sr.pts.forEach(q => {
+                        const px = X(q.ts), py = yv(q.v);
+                        ctx.fillStyle = col; ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                    });
                     return;
                 }
                 ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
