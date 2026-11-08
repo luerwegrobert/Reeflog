@@ -2511,28 +2511,40 @@
         function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
 
         // gemeinsame Mengenachse nur, wenn Einheit gleich und Größenordnung ähnlich (sonst Prozent)
-        function doseShared(series) {
-            if (series.length < 2) return true;
+        function doseMode(series) {
+            if (series.length < 2) return 'lin';
             const u0 = doseUnit(series[0].k);
-            if (!series.every(sr => doseUnit(sr.k) === u0)) return false;
+            if (!series.every(sr => doseUnit(sr.k) === u0)) return 'pct';
             const mx = series.map(sr => sr.max).filter(x => x > 0);
-            return !mx.length || Math.max(...mx) / Math.min(...mx) <= 10;
+            return (!mx.length || Math.max(...mx) / Math.min(...mx) <= 10) ? 'lin' : 'log';
         }
+        function doseShared(series) { return doseMode(series) !== 'pct'; }
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
             const L = 60, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
             const unit0 = series.length ? doseUnit(series[0].k) : 'ml';
-            const single = doseShared(series);
-            const ymax = single ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
+            const mode = doseMode(series), single = mode !== 'pct';
+            const ymax = mode === 'lin' ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
+            let lgLo = 1, lgHi = 10;
+            if (mode === 'log') {
+                const allv = []; series.forEach(sr => sr.pts.forEach(q => { if (q.v > 0) allv.push(q.v); }));
+                lgLo = Math.pow(10, Math.floor(Math.log10(Math.min(...allv)) + 1e-9));
+                lgHi = Math.pow(10, Math.ceil(Math.log10(Math.max(...allv)) - 1e-9));
+                if (lgHi <= lgLo) lgHi = lgLo * 10;
+            }
+            const lgY = v => (Math.log10(Math.max(v, lgLo)) - Math.log10(lgLo)) / (Math.log10(lgHi) - Math.log10(lgLo));
             const X = ts => L + (ts - from) / (to - from) * pw;
-            const Y = v => T + ph - (single ? v / ymax : v / 1) * ph;
+            const Y = v => T + ph - (mode === 'log' ? lgY(v) : single ? v / ymax : v / 1) * ph;
             ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
             ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.lineWidth = 1;
-            for (let i = 0; i <= 4; i++) {
-                const yy = T + ph - i / 4 * ph;
+            const ticks = [];
+            if (mode === 'log') { for (let p = Math.log10(lgLo); p <= Math.log10(lgHi) + 1e-9; p++) ticks.push(Math.pow(10, p)); }
+            const nT = mode === 'log' ? ticks.length - 1 : 4;
+            for (let i = 0; i <= nT; i++) {
+                const yy = T + ph - i / nT * ph;
                 ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke();
-                const val = ymax * i / 4;
+                const val = mode === 'log' ? ticks[i] : ymax * i / 4;
                 ctx.textAlign = 'right';
-                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + (i === 4 ? ' ' + unit0 : '') : Math.round(val) + ' %', L - 6, yy);
+                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + (i === nT ? ' ' + unit0 : '') : Math.round(val) + ' %', L - 6, yy);
             }
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
             for (let i = 0; i <= 3; i++) {
@@ -2655,7 +2667,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (!doseShared(series) ? 'Mehrere Werte mit sehr verschiedenen Mengen oder Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe in die Grafik für die genauen Werte.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
@@ -2961,7 +2973,7 @@
                         const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
                         const cw = W - 2 * M, ch = cw * lh / lw;
                         const rn = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[doseRange] || doseRange + ' Tage';
-                        const cap = wrap(`Zeitraum: ${rn} · ${!doseShared(series) ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
+                        const cap = wrap(`Zeitraum: ${rn} · ${doseMode(series) === 'pct' ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : doseMode(series) === 'log' ? 'Logarithmische Mengenachse. ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
                         ensure(ch + cap.length * 12 + 8);
                         cap.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
                         y -= 4;
