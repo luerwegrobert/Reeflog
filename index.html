@@ -453,6 +453,10 @@
             border-radius: 6px;
             font-size: 0.82rem;
         }
+        #detailModal { display: none; position: fixed; inset: 0; z-index: 9000; background: #010305; }
+        #detailBody { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 28px); max-width: 640px; margin: 0 auto; }
+        #detailBody .thr-link { font-size: 0.85rem; padding: 8px 6px; }
+        .detail-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin: 18px 0 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; }
         .btn-note {
             margin-top: 8px;
             background: rgba(255, 255, 255, 0.06);
@@ -873,7 +877,7 @@
         <!-- DOSIERUNGEN TAB -->
         <div id="dosing" class="tab-content">
             <div class="glass-panel" id="dosePanel">
-                <div style="font-weight: 700; margin-bottom: 12px;">📈 Dosierverlauf (Tagesdosis)</div>
+                <div style="font-weight: 700; margin-bottom: 12px;">📈 Dosierverlauf</div>
                 <div class="chart-controls">
                     <div class="range-toggle" id="doseRange">
                         <button type="button" class="dose-range-btn" data-days="7" onclick="setDoseRange(7)">7 Tage</button>
@@ -889,7 +893,7 @@
                 </div>
                 <div class="chart-hint" id="doseHint"></div>
                 <details style="margin-top: 10px;">
-                    <summary style="cursor: pointer; font-size: 0.8rem; color: var(--text-muted);">Einträge der Tagesdosis anzeigen</summary>
+                    <summary style="cursor: pointer; font-size: 0.8rem; color: var(--text-muted);">Dosierungen anzeigen</summary>
                     <div id="doseLogList" style="margin-top: 8px;"></div>
                 </details>
             </div>
@@ -1290,6 +1294,105 @@
             inp.value = '';
         }
 
+        // ===== Detailfenster je Messwert =====
+        let detailK = null, detailEdit = null;
+        function persistRecords() {
+            records.sort((a, b) => recTs(a) - recTs(b));
+            try { localStorage.setItem('pepeaqua_records', JSON.stringify(records)); } catch (e) {}
+            renderDashboard(); renderHistoryTable(); updateChart(); renderRecommendations();
+        }
+        function openDetail(k) {
+            detailK = k; detailEdit = null;
+            document.getElementById('detailModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            renderDetail();
+            document.getElementById('detailBody').scrollTop = 0;
+        }
+        function closeDetail() {
+            detailK = null; detailEdit = null;
+            document.getElementById('detailModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        function detailGo(tab) { closeDetail(); switchTab(tab); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        function detailRows(k) {
+            return records.filter(r => r.values && r.values[k] !== null && r.values[k] !== undefined && r.values[k] !== '' && isFinite(parseFloat(r.values[k])))
+                .sort((a, b) => recTs(b) - recTs(a));
+        }
+        function detailChart(k) {
+            const cfg = thresholds[k], rows = detailRows(k).slice(0, 15).reverse();
+            if (rows.length < 2) return '<div class="rec-meta">Für eine Kurve werden mindestens zwei Messungen benötigt.</div>';
+            const pts = rows.map(r => ({ ts: recTs(r), v: parseFloat(r.values[k]) }));
+            const vs = pts.map(q => q.v);
+            let lo = Math.min(cfg.minOpt, ...vs), hi = Math.max(cfg.maxOpt, ...vs);
+            const pd = (hi - lo) * 0.12 || 1; lo -= pd; hi += pd;
+            const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, H = 100;
+            const X = t => 4 + (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5) * 92, Y = v => H - 4 - (v - lo) / (hi - lo) * (H - 8);
+            const col = paramColors[k];
+            const d = pts.map((q, i) => (i ? 'L' : 'M') + X(q.ts).toFixed(2) + ' ' + Y(q.v).toFixed(2)).join(' ');
+            const bt = Math.max(0, Y(cfg.maxOpt)), bb = Math.min(H, Y(cfg.minOpt));
+            const dots = pts.map(q => `<path d="M${X(q.ts).toFixed(2)} ${Y(q.v).toFixed(2)} h0.01" stroke="${col}" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join('');
+            const fd = t => { const x = new Date(t); return pad2(x.getDate()) + '.' + pad2(x.getMonth() + 1) + '.'; };
+            return `<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" style="width:100%;height:130px;display:block;background:rgba(255,255,255,0.03);border-radius:10px;">
+                <rect x="0" y="${bt.toFixed(2)}" width="100" height="${Math.max(0, bb - bt).toFixed(2)}" fill="rgba(0,255,135,0.10)"/>
+                <path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>${dots}</svg>
+                <div class="rec-meta" style="display:flex;justify-content:space-between;margin-top:4px;"><span>${fd(t0)}</span><span>Min ${fmtNum(Math.min(...vs))} · Max ${fmtNum(Math.max(...vs))}</span><span>${fd(t1)}</span></div>`;
+        }
+        function detailEditStart(id) { detailEdit = id; renderDetail(); }
+        function detailEditSave(id) {
+            const r = records.find(x => x.id === id); if (!r) return;
+            const n = parseFloat(String(document.getElementById('de_v').value).replace(',', '.'));
+            const dt = document.getElementById('de_d').value, tm = document.getElementById('de_t').value;
+            if (!isFinite(n) || n < 0) { alert('Bitte einen gültigen Wert eingeben.'); return; }
+            if (!dt) { alert('Bitte ein Datum angeben.'); return; }
+            r.values[detailK] = String(n); r.date = dt; r.time = tm || '';
+            if (r.raw) delete r.raw[detailK];
+            if (r.methods && r.methods[detailK]) r.methods[detailK] = r.methods[detailK].replace(/ \(korrigiert\)$/, '') + ' (korrigiert)';
+            detailEdit = null; persistRecords(); renderDetail();
+        }
+        function detailDelete(id) {
+            const r = records.find(x => x.id === id); if (!r) return;
+            if (!confirm('Nur den Wert „' + thresholds[detailK].label + '“ dieser Messung löschen?')) return;
+            r.values[detailK] = null; if (r.raw) delete r.raw[detailK]; if (r.methods) delete r.methods[detailK];
+            if (!Object.keys(r.values).some(x => r.values[x] !== null && r.values[x] !== undefined && r.values[x] !== '') && !r.note) records = records.filter(x => x.id !== id);
+            detailEdit = null; persistRecords(); renderDetail();
+        }
+        function detailThr(f, v) { setThr(detailK, f, v); }
+        function renderDetail() {
+            const k = detailK; if (!k) return;
+            const cfg = thresholds[k], lv = latestValue(k), col = paramColors[k];
+            const st = lv ? getStatusColorClass(k, String(lv.v)) : null;
+            const rows = detailRows(k).slice(0, 8);
+            const unit = cfg.unit ? ' ' + cfg.unit : '';
+            const rd = buildRecs(), it = rd.items.find(x => x.k === k);
+            const prods = Object.keys(appSettings.products || {}).filter(sl => sl.split('_')[0] === k && appSettings.products[sl] && appSettings.products[sl].name)
+                .map(sl => { const p = appSettings.products[sl]; const dirTxt = sl.endsWith('_down') ? '⬇️ senken' : '⬆️ erhöhen'; let dose = ''; if (sl.endsWith('_up') && DAILY_PARAMS.includes(k)) { const ref = refDose(sl, p); dose = p.mode === 'once' ? (ref ? ` · letzte Einmal-Gabe ${fmtNum(ref)} ${escapeHtml(p.unit || 'ml')}` : ' · Einmal-Gabe') : (p.daily > 0 ? ` · Tagesdosis ${fmtNum(p.daily)} ${escapeHtml(p.unit || 'ml')}` : ''); } return `<div class="rec-meta" style="font-size:0.85rem;">${dirTxt}: <b>${escapeHtml(p.name)}</b>${dose}</div>`; }).join('');
+            const e = effectiveThr(k);
+            const rowHtml = rows.map(r => {
+                const d = r.date.split('-').reverse().join('.');
+                if (detailEdit === r.id) {
+                    return `<div class="rem-row" style="flex-wrap:wrap;gap:6px;"><input type="date" id="de_d" class="input-styled" value="${r.date}" style="flex:1 1 120px;"><input type="time" id="de_t" class="input-styled" value="${r.time || ''}" style="flex:1 1 90px;"><input type="number" step="any" inputmode="decimal" id="de_v" class="input-styled" value="${r.values[k]}" style="flex:1 1 90px;"><button type="button" class="btn-note save" onclick="detailEditSave(${r.id})">Speichern</button><button type="button" class="btn-note" onclick="detailEdit=null;renderDetail()">Abbrechen</button></div>`;
+                }
+                const m = r.methods && r.methods[k] ? ` · ${escapeHtml(r.methods[k])}` : (r.procedure && r.type !== 'Heimtest' ? ` · ${escapeHtml(r.procedure)}` : '');
+                return `<div class="rem-row" style="justify-content:space-between;gap:8px;"><span><b>${fmtNum(parseFloat(r.values[k]))}${unit}</b><br><span class="rec-meta">${d}${r.time ? ' ' + r.time : ''}${m}</span></span><span style="white-space:nowrap;"><button type="button" class="thr-link" onclick="detailEditStart(${r.id})" aria-label="Bearbeiten">✏️ ändern</button> <button type="button" class="thr-link" onclick="detailDelete(${r.id})" aria-label="Löschen">🗑</button></span></div>`;
+            }).join('') || '<div class="rec-meta">Noch keine Messung.</div>';
+            const thrInline = k === 'sal' ? `<div class="rec-meta">Sollbereich: ${fmtNum(e.minOpt)}–${fmtNum(e.maxOpt)}${unit} (Einheit psu/Dichte unter „Sollwerte“ umstellbar)</div>`
+                : `<div class="thr-grid"><div><label>Optimal ab</label><input type="number" step="any" inputmode="decimal" class="input-styled" value="${e.minOpt}" onchange="detailThr('minOpt',this.value)"></div><div><label>Optimal bis</label><input type="number" step="any" inputmode="decimal" class="input-styled" value="${e.maxOpt}" onchange="detailThr('maxOpt',this.value)"></div></div>`;
+            document.getElementById('detailBody').innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div style="font-size:1.25rem;font-weight:800;color:${col};">${cfg.label}</div>
+                    <button type="button" class="btn-note" onclick="closeDetail()" aria-label="Schließen">✕ Schließen</button>
+                </div>
+                <div style="font-size:2rem;font-weight:800;color:${st ? st.color : '#fff'};">${lv ? fmtNum(lv.v) : '–'}<span style="font-size:1rem;color:var(--text-muted);">${unit}</span> ${st && st.label ? `<span class="status-badge ${st.badge}" style="vertical-align:middle;">${st.label}</span>` : ''}</div>
+                <div class="rec-meta" style="margin-bottom:12px;">Soll: ${fmtNum(e.minOpt)}–${fmtNum(e.maxOpt)}${unit}${lv ? ' · gemessen ' + lv.date.split('-').reverse().join('.') + (lv.time ? ' ' + lv.time : '') : ''}</div>
+                <div class="detail-h">Verlauf</div>${detailChart(k)}
+                <div class="detail-h">Letzte Messungen</div>${rowHtml}
+                <div class="detail-h">Sollwerte</div>${thrInline}
+                <button type="button" class="thr-link" onclick="detailGo('targets')">Alle Sollwerte öffnen →</button>
+                <div class="detail-h">Dosierung</div>${prods || '<div class="rec-meta">Noch kein Produkt hinterlegt.</div>'}
+                <button type="button" class="thr-link" onclick="detailGo('dosing')">Dosierungen öffnen →</button>
+                <div class="detail-h">Empfehlung</div>${it ? recItemHtml(it, rd) : '<div class="rec-meta">✅ Der letzte Wert liegt im Sollbereich, keine Maßnahme nötig.</div>'}`;
+        }
+
         function saveRecord(e) {
             e.preventDefault();
             const heim = currentRecordType === 'Heimtest';
@@ -1429,7 +1532,7 @@
                 let spark = ''; try { spark = sparkSvg(param, stat.color); } catch (e) { console.error(e); }
                 
                 let cardHtml = `
-                    <div class="param-card ${param}">
+                    <div class="param-card ${param}" onclick="openDetail('${param}')" style="cursor:pointer;" role="button" aria-label="Details zu ${cfg.label}">
                         <div class="param-header">
                             <span>${cfg.label}</span>
                             ${val ? `<span class="status-badge ${stat.badge}">${stat.label}</span>` : ''}
@@ -1641,6 +1744,7 @@
             renderHistoryTable();
             updateChart();
             renderTargetRows();
+            if (detailK) renderDetail();
         }
 
         const thrErr = {};
@@ -2406,10 +2510,19 @@
         }
         function deleteDose(i) { dosingLog.splice(i, 1); saveDosing(); renderDoseChart(); }
 
+        // gemeinsame Mengenachse nur, wenn Einheit gleich und Größenordnung ähnlich (sonst Prozent)
+        function doseShared(series) {
+            if (series.length < 2) return true;
+            const u0 = doseUnit(series[0].k);
+            if (!series.every(sr => doseUnit(sr.k) === u0)) return false;
+            const mx = series.map(sr => sr.max).filter(x => x > 0);
+            return !mx.length || Math.max(...mx) / Math.min(...mx) <= 10;
+        }
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
-            const L = 44, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
-            const single = series.length === 1;
-            const ymax = single ? niceMax(series[0].max * 1.15) : 100;
+            const L = 60, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+            const unit0 = series.length ? doseUnit(series[0].k) : 'ml';
+            const single = doseShared(series);
+            const ymax = single ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
             const X = ts => L + (ts - from) / (to - from) * pw;
             const Y = v => T + ph - (single ? v / ymax : v / 1) * ph;
             ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
@@ -2419,7 +2532,7 @@
                 ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke();
                 const val = ymax * i / 4;
                 ctx.textAlign = 'right';
-                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) : Math.round(val) + ' %', L - 6, yy);
+                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + (i === 4 ? ' ' + unit0 : '') : Math.round(val) + ' %', L - 6, yy);
             }
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
             for (let i = 0; i <= 3; i++) {
@@ -2540,7 +2653,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (series.length > 1 ? 'Mehrere Werte: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (!doseShared(series) ? 'Mehrere Werte mit sehr verschiedenen Mengen oder Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
@@ -2846,7 +2959,7 @@
                         const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
                         const cw = W - 2 * M, ch = cw * lh / lw;
                         const rn = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[doseRange] || doseRange + ' Tage';
-                        const cap = wrap(`Zeitraum: ${rn} · ${series.length > 1 ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
+                        const cap = wrap(`Zeitraum: ${rn} · ${!doseShared(series) ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
                         ensure(ch + cap.length * 12 + 8);
                         cap.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
                         y -= 4;
@@ -3667,6 +3780,7 @@
             myChart.update();
         }
     </script>
+<div id="detailModal" role="dialog" aria-modal="true"><div id="detailBody"></div></div>
 <script>
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
         window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
