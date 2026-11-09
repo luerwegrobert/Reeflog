@@ -520,6 +520,12 @@
         .rec-link { color: #4fe3ee; text-decoration: underline; cursor: pointer; }
         .prod-block { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
         .prod-title { font-weight: 700; margin-bottom: 6px; }
+        details.prod-acc > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; margin-bottom: 0; padding: 6px 0; }
+        details.prod-acc > summary::-webkit-details-marker { display: none; }
+        details.prod-acc > summary::before { content: '▸'; font-size: 0.9rem; transition: transform 0.15s; flex: none; }
+        details.prod-acc[open] > summary::before { transform: rotate(90deg); }
+        details.prod-acc[open] > summary { margin-bottom: 6px; }
+        .prod-sum { margin-left: auto; font-weight: 500; font-size: 0.78rem; color: var(--text-muted); text-align: right; }
         .prod-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 8px; font-size: 0.85rem; }
         .prod-line input { width: 82px; }
         .prod-line select { width: 112px; }
@@ -1825,8 +1831,10 @@
                 const unit = cfg.unit ? ' (' + (dens ? 'kg/m³ Dichte' : cfg.unit) + ')' : '';
                 const ex = userThr[k] || {};
                 const unitSw = k === 'sal' ? `<div class="prod-line" style="margin-bottom:6px;"><span>Einheit:</span><select class="input-styled" onchange="setSalUnit(this.value)"><option value="psu"${dens ? '' : ' selected'}>psu (Salinität)</option><option value="dens"${dens ? ' selected' : ''}>Dichte (Aräometer, kg/m³)</option></select></div>` : '';
-                return `<div class="prod-block">
-                    <div class="prod-title" style="color:${paramColors[k]}">${cfg.label}${unit}${custom ? '<span class="thr-tag">✎ angepasst</span><button type="button" class="thr-link" onclick="resetThrParam(\'' + k + '\')">zurücksetzen</button>' : ''}</div>
+                const sum = (e.minOpt !== undefined && e.maxOpt !== undefined) ? fmtNum(cv(k, e.minOpt)) + ' – ' + fmtNum(cv(k, e.maxOpt)) : '';
+                return `<details class="prod-block prod-acc"${(prodOpen.has('thr_' + k) || thrErr[k]) ? ' open' : ''} ontoggle="prodToggle('thr_${k}',this.open)">
+                    <summary class="prod-title" style="color:${paramColors[k]}">${cfg.label}${custom ? '<span class="thr-tag">✎</span>' : ''}<span class="prod-sum">${sum}</span></summary>
+                    ${custom ? '<div style="margin-bottom:6px;"><button type="button" class="thr-link" onclick="resetThrParam(\'' + k + '\')">zurücksetzen</button></div>' : ''}
                     ${unitSw}
                     <div class="thr-grid">
                         ${fld(k, 'minOpt', 'Soll von', e.minOpt, '')}
@@ -1836,7 +1844,7 @@
                         ${fld(k, 'target', 'Zielwert', e.target !== undefined ? e.target : undefined, 'Mitte: ' + fmtNum(cv(k, (e.minOpt + e.maxOpt) / 2)))}
                     </div>
                     ${thrErr[k] ? `<div class="thr-err">⚠️ ${thrErr[k]} Die Änderung wurde nicht übernommen.</div>` : ''}
-                </div>`;
+                </details>`;
             }).join('');
         }
 
@@ -2804,16 +2812,28 @@
                         <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`);
         }
 
+        const prodOpen = new Set();
+        function prodToggle(slot, open) { if (open) prodOpen.add(slot); else prodOpen.delete(slot); }
+        function prodSummary(slot, p) {
+            const parts = [];
+            if (p.name && slot !== 'aio_up') parts.push(escapeHtml(p.name));
+            if (slot.endsWith('_up') && (DAILY_PARAMS.includes(slot.split('_')[0]) || slot === 'aio_up')) {
+                const u = escapeHtml(p.unit || 'ml');
+                if (p.mode === 'once') { const g = lastGabe(slot); parts.push(g ? `letzte Gabe ${fmtNum(g.v)} ${u}` : 'Einmal-Gabe'); }
+                else if (p.daily > 0) parts.push(`${fmtNum(p.daily)} ${u}/Tag`);
+            }
+            return parts.length ? parts.join(' · ') : 'nicht eingerichtet';
+        }
         function renderProductSettings() {
             let html = `<div class="rem-row"><label>Nettovolumen</label><input type="number" min="1" inputmode="decimal" class="input-styled" style="width:110px;" placeholder="z. B. 400" value="${appSettings.volume || ''}" onchange="setVolume(this.value)"><span>Liter</span></div>
                 <div style="font-size:0.75rem; color:var(--text-muted);">Wassermenge im System ohne Gestein und Sand (Becken plus Technikbecken).</div>`;
             let aioHtml = '';
             {
                 const a = appSettings.products.aio_up || {}, units = ['ml', 'g', 'Tropfen', 'Tabletten'];
-                aioHtml = `<div class="prod-block" style="border-color:${paramColors.aio};">
-                    <div class="prod-title" style="color:${paramColors.aio}">🧪 All4Reef (A4R)</div>
+                aioHtml = `<details class="prod-block prod-acc"${prodOpen.has('aio_up') ? ' open' : ''} ontoggle="prodToggle('aio_up',this.open)">
+                    <summary class="prod-title" style="color:${paramColors.aio}">🧪 All4Reef (A4R)<span class="prod-sum">${prodSummary('aio_up', a)}</span></summary>
                     ${doseBlockHtml('aio_up', a)}
-                </div>`;
+                </details>`;
             }
             Object.keys(REC.slots).forEach(k => {
                 REC.slots[k].forEach(dir => {
@@ -2826,8 +2846,8 @@
                         return;
                     }
                     const units = ['ml', 'g', 'Tropfen', 'Tabletten'];
-                    html += `<div class="prod-block">
-                        <div class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ${dir === 'up' ? '⬆️ erhöhen' : '⬇️ senken'}</div>
+                    html += `<details class="prod-block prod-acc"${prodOpen.has(slot) ? ' open' : ''} ontoggle="prodToggle('${slot}',this.open)">
+                        <summary class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ${dir === 'up' ? '⬆️ erhöhen' : '⬇️ senken'}<span class="prod-sum">${prodSummary(slot, p)}</span></summary>
                         <input type="text" class="input-styled" placeholder="Produktname" value="${escapeHtml(p.name || '')}" onchange="setProduct('${slot}','name',this.value)">
                         <div class="prod-line">
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="1" value="${p.amount || ''}" onchange="setProduct('${slot}','amount',this.value)">
@@ -2839,7 +2859,7 @@
                             <span>Litern</span>
                         </div>
                         ${(DAILY_PARAMS.includes(k) && dir === 'up') ? doseBlockHtml(slot, p) : ''}
-                    </div>`;
+                    </details>`;
                 });
             });
             document.getElementById('productRows').innerHTML = html;
