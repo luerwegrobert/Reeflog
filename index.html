@@ -985,7 +985,7 @@
         // Init App
         document.addEventListener('DOMContentLoaded', () => {
             applyThresholds();
-            seedDosing();
+            seedDosing(); syncAio();
             const dc = document.getElementById('doseCanvas');
             if (dc) { dc.addEventListener('click', doseTap); window.addEventListener('resize', () => { if (document.getElementById('dosing').classList.contains('active')) renderDoseChart(); }); }
             tmInit();
@@ -2342,7 +2342,7 @@
         // Tagesdosis: Anpassung der eigenen Erhaltungsdosis um 15 % (üblicher Richtwert, danach nachmessen)
         const DAILY_PCT = 0.15;
         const DAILY_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
-        function lastGabe(slot) { return dosingLog.filter(e => e.kind === 'once' && e.slot === slot).sort((a, b) => b.ts - a.ts)[0] || null; }
+        function lastGabe(slot) { slot = doseSlotOf(slot); return dosingLog.filter(e => e.kind === 'once' && e.slot === slot).sort((a, b) => b.ts - a.ts)[0] || null; }
         function refDose(slot, p) { if (p && p.mode === 'once') { const g = lastGabe(slot); return g ? g.v : 0; } return p ? (p.daily || 0) : 0; }
         function hasDaily(k, slot) { const p = appSettings.products[k + '_' + slot]; return !!(p && p.name && refDose(k + '_' + slot, p) > 0); }
         function dailyAdvice(it) {
@@ -2486,10 +2486,19 @@
         }
 
         function setProduct(slot, field, v) {
+            if (appSettings.products[slot] && appSettings.products[slot].aio) slot = 'aio_up';
             const p = appSettings.products[slot] || (appSettings.products[slot] = {});
+            if (/^eff_/.test(field)) {
+                const key = field.slice(4), n = parseFloat(String(v).replace(',', '.'));
+                p.eff = p.eff || {};
+                if (n > 0) p.eff[key] = n; else delete p.eff[key];
+                syncAio(); renderProductSettings(); renderDoseChart();
+                if (typeof renderRecommendations === 'function') renderRecommendations();
+                return;
+            }
             if (field === 'mode') {
                 if (v === 'once') p.mode = 'once'; else delete p.mode;
-                saveSettings(); seedDosing(); renderProductSettings(); renderDoseChart();
+                saveSettings(); seedDosing(); syncAio(); renderProductSettings(); renderDoseChart();
                 if (typeof renderRecommendations === 'function') renderRecommendations();
                 return;
             }
@@ -2500,13 +2509,14 @@
             }
             saveSettings();
             if (field === 'daily') { logDose(slot, p.daily || 0); renderDoseChart(); }
+            if (slot === 'aio_up') { syncAio(); renderProductSettings(); renderDoseChart(); if (typeof renderRecommendations === 'function') renderRecommendations(); }
         }
 
         // ===== Dosierverlauf =====
         let dosingLog = (() => { try { const x = JSON.parse(localStorage.getItem('pepeaqua_dosing')); return Array.isArray(x) ? x : []; } catch (e) { return []; } })();
         function saveDosing() { try { localStorage.setItem('pepeaqua_dosing', JSON.stringify(dosingLog)); } catch (e) {} }
         const DOSE_PARAMS = ['kh', 'ca', 'mg', 'no3', 'po4'];
-        let doseRange = 30, doseSel = new Set(DOSE_PARAMS), doseHover = null;
+        let doseRange = 30, doseSel = new Set(['aio', ...DOSE_PARAMS]), doseHover = null;
         function logDose(slot, v) {
             const last = doseEvents(slot.split('_')[0]).pop();
             if (last ? last.v === v : v === 0) return;
@@ -2515,17 +2525,34 @@
         }
         function seedDosing() {
             let ch = false;
-            DOSE_PARAMS.forEach(k => {
+            ['aio', ...DOSE_PARAMS].forEach(k => {
                 const slot = k + '_up', p = appSettings.products && appSettings.products[slot];
-                if (p && p.mode !== 'once' && p.daily > 0 && !dosingLog.some(e => e.slot === slot && !e.kind)) { dosingLog.push({ ts: Date.now(), slot, v: p.daily }); ch = true; }
+                if (p && !p.aio && p.mode !== 'once' && p.daily > 0 && !dosingLog.some(e => e.slot === slot && !e.kind)) { dosingLog.push({ ts: Date.now(), slot, v: p.daily }); ch = true; }
             });
             if (ch) saveDosing();
         }
         function setDoseRange(d) { doseRange = d; doseHover = null; renderDoseChart(); }
         function toggleDoseParam(k) { if (doseSel.has(k)) doseSel.delete(k); else doseSel.add(k); doseHover = null; renderDoseChart(); }
         // Die erste Eingabe gilt ab dem Tag selbst (die Dosierung lief ja schon), jede spätere Änderung ab dem Folgetag
+        const AIO_KEYS = ['kh', 'ca', 'mg'];
+        function doseSlotOf(slot) { const p = appSettings.products && appSettings.products[slot]; return p && p.aio ? 'aio_up' : slot; }
+        function doseLabel(k) { return k === 'aio' ? 'All4Reef' : (thresholds[k] ? thresholds[k].label : k); }
+        function doseActive() {
+            const out = [], pr = appSettings.products || {};
+            if ((pr.aio_up && pr.aio_up.daily > 0) || dosingLog.some(e => e.slot === 'aio_up')) out.push('aio');
+            DOSE_PARAMS.forEach(k => out.push(k));
+            return out;
+        }
+        // All4Reef ist ein eigenständiges Dosierprodukt (nur Dosiermenge, keine Wirkungsberechnung); alte Spiegel-Einträge werden entfernt
+        function syncAio() {
+            const pr = appSettings.products; if (!pr) return;
+            AIO_KEYS.forEach(k => { if (pr[k + '_up'] && pr[k + '_up'].aio) delete pr[k + '_up']; });
+            if (pr.aio_up) { pr.aio_up.name = 'All4Reef'; pr.aio_up.unit = 'ml'; delete pr.aio_up.eff; delete pr.aio_up.amount; delete pr.aio_up.per; }
+            saveSettings();
+        }
         function doseEvents(k) {
-            return dosingLog.filter(e => e.slot === k + '_up' && !e.kind).sort((a, b) => a.ts - b.ts)
+            const sl = k === 'aio' ? 'aio_up' : doseSlotOf(k + '_up');
+            return dosingLog.filter(e => e.slot === sl && !e.kind).sort((a, b) => a.ts - b.ts)
                 .map((e, i) => Object.assign({}, e, { eff: e.eff !== undefined ? e.eff : startOfDay(e.ts) + (i === 0 ? 0 : DAY_MS) }))
                 .sort((a, b) => a.eff - b.eff);
         }
@@ -2539,7 +2566,7 @@
             const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(di.value || isoToday());
             const ts = new Date(+m[1], +m[2] - 1, +m[3], 12).getTime();
             dosingLog.push({ ts, slot, v: n, kind: 'once' });
-            saveDosing(); renderProductSettings(); renderDoseChart();
+            saveDosing(); syncAio(); renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
         }
         function deleteGabe(i) {
@@ -2550,7 +2577,7 @@
             const slot = dosingLog[i] && dosingLog[i].slot;
             dosingLog.splice(i, 1); saveDosing();
             const k = slot && slot.split('_')[0], p = slot && appSettings.products && appSettings.products[slot];
-            if (p && p.mode !== 'once' && dosingLog.some(e => e.slot === slot && !e.kind)) { p.daily = doseEvents(k).pop().v; saveSettings(); renderProductSettings(); if (typeof renderRecommendations === 'function') renderRecommendations(); }
+            if (p && p.mode !== 'once' && dosingLog.some(e => e.slot === slot && !e.kind)) { p.daily = doseEvents(k).pop().v; saveSettings(); syncAio(); renderProductSettings(); if (typeof renderRecommendations === 'function') renderRecommendations(); }
             renderDoseChart();
         }
         // Tagesdosis rückwirkend (oder für einen bestimmten Tag) nachtragen: gilt ab dem gewählten Tag
@@ -2568,7 +2595,7 @@
             dosingLog.push({ ts: day + DAY_MS / 2, slot, v: n, eff: day });
             const p = appSettings.products[slot];
             if (p && p.mode !== 'once') p.daily = doseEvents(k).pop().v;
-            saveDosing(); saveSettings();
+            saveDosing(); saveSettings(); syncAio();
             renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
         }
@@ -2647,13 +2674,13 @@
                 series.forEach(sr => {
                     if (sr.bars) {
                         const dd = startOfDay(hover), q = sr.pts.find(z => startOfDay(z.ts) === dd);
-                        rows.push({ dot: paramColors[sr.k], text: `${thresholds[sr.k].label}: ${q ? fmtNum(q.v) + ' ' + doseUnit(sr.k) + ' Einmal-Gabe' : 'keine Gabe an diesem Tag'}` });
+                        rows.push({ dot: paramColors[sr.k], text: `${doseLabel(sr.k)}: ${q ? fmtNum(q.v) + ' ' + doseUnit(sr.k) + ' Einmal-Gabe' : 'keine Gabe an diesem Tag'}` });
                         return;
                     }
                     const e = doseValueAt(sr.k, hover);
                     if (!e) return;
                     const sd = new Date(e.eff);
-                    rows.push({ dot: paramColors[sr.k], text: `${thresholds[sr.k].label}: ${e.v > 0 ? fmtNum(e.v) + ' ' + doseUnit(sr.k) + ' pro Tag' : 'keine Dosierung'} (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)` });
+                    rows.push({ dot: paramColors[sr.k], text: `${doseLabel(sr.k)}: ${e.v > 0 ? fmtNum(e.v) + ' ' + doseUnit(sr.k) + ' pro Tag' : 'keine Dosierung'} (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)` });
                 });
                 if (!rows.length) rows.push({ text: 'noch keine Dosierung erfasst' });
                 const title = `${pad2(d0.getDate())}.${pad2(d0.getMonth() + 1)}.${d0.getFullYear()}`;
@@ -2683,7 +2710,7 @@
         }
         function doseSeriesFor(days, sel) {
             const to = Date.now(), from = to - days * DAY_MS, series = [];
-            DOSE_PARAMS.forEach(k => {
+            doseActive().forEach(k => {
                 if (!sel.has(k)) return;
                 const pp = (appSettings.products && appSettings.products[k + '_up']) || {};
                 if (pp.mode === 'once') {
@@ -2707,16 +2734,16 @@
             const cv = document.getElementById('doseCanvas');
             if (!cv) return;
             document.querySelectorAll('.dose-range-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.days) === doseRange));
-            document.getElementById('doseChips').innerHTML = DOSE_PARAMS.map(k => {
+            document.getElementById('doseChips').innerHTML = doseActive().map(k => {
                 const on = doseSel.has(k), c = paramColors[k];
-                return `<button type="button" class="chip${on ? ' active' : ''}" style="--c:${c};--cbg:${c}26" aria-pressed="${on}" onclick="toggleDoseParam('${k}')">${thresholds[k].label}</button>`;
+                return `<button type="button" class="chip${on ? ' active' : ''}" style="--c:${c};--cbg:${c}26" aria-pressed="${on}" onclick="toggleDoseParam('${k}')">${escapeHtml(doseLabel(k))}</button>`;
             }).join('');
             // Liste der Einträge
             const rows = dosingLog.map((e, i) => ({ e, i })).sort((a, b) => b.e.ts - a.e.ts);
             document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
                 const k = e.slot.split('_')[0], d = new Date(e.ts);
                 const p = appSettings.products[e.slot] || {};
-                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${thresholds[k].label}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${(e.kind === 'once' || e.eff !== undefined) ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' + (e.eff !== undefined ? ' (ab diesem Tag)' : '') : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${escapeHtml(doseLabel(k))}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${(e.kind === 'once' || e.eff !== undefined) ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' + (e.eff !== undefined ? ' (ab diesem Tag)' : '') : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
             }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
 
             const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
@@ -2748,28 +2775,8 @@
             renderDoseChart();
         }
 
-        function renderProductSettings() {
-            let html = `<div class="rem-row"><label>Nettovolumen</label><input type="number" min="1" inputmode="decimal" class="input-styled" style="width:110px;" placeholder="z. B. 400" value="${appSettings.volume || ''}" onchange="setVolume(this.value)"><span>Liter</span></div>
-                <div style="font-size:0.75rem; color:var(--text-muted);">Wassermenge im System ohne Gestein und Sand (Becken plus Technikbecken).</div>`;
-            Object.keys(REC.slots).forEach(k => {
-                REC.slots[k].forEach(dir => {
-                    const slot = k + '_' + dir;
-                    const p = appSettings.products[slot] || {};
-                    const cfg = thresholds[k];
-                    const units = ['ml', 'g', 'Tropfen', 'Tabletten'];
-                    html += `<div class="prod-block">
-                        <div class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ${dir === 'up' ? '⬆️ erhöhen' : '⬇️ senken'}</div>
-                        <input type="text" class="input-styled" placeholder="Produktname" value="${escapeHtml(p.name || '')}" onchange="setProduct('${slot}','name',this.value)">
-                        <div class="prod-line">
-                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="1" value="${p.amount || ''}" onchange="setProduct('${slot}','amount',this.value)">
-                            <select class="input-styled" onchange="setProduct('${slot}','unit',this.value)">${units.map(u => `<option${(p.unit || 'ml') === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
-                            <span>${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um</span>
-                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${cfg.unit === 'psu' ? '1' : '0,1'}" value="${p.effect || ''}" onchange="setProduct('${slot}','effect',this.value)">
-                            <span>${cfg.unit} in</span>
-                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
-                            <span>Litern</span>
-                        </div>
-                        ${(DAILY_PARAMS.includes(k) && dir === 'up') ? `<div class="prod-line">
+        function doseBlockHtml(slot, p) {
+            return `<div class="prod-line">
                             <span>Dosierart:</span>
                             <select class="input-styled" onchange="setProduct('${slot}','mode',this.value)">
                                 <option value="daily"${p.mode === 'once' ? '' : ' selected'}>Tagesdosis (läuft täglich weiter)</option>
@@ -2794,7 +2801,44 @@
                             <span>${escapeHtml(p.unit || 'ml')}</span>
                             <button type="button" class="btn-note save" onclick="addDailyFrom('${slot}')">➕ Eintragen</button>
                         </div>
-                        <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`) : ''}
+                        <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`);
+        }
+
+        function renderProductSettings() {
+            let html = `<div class="rem-row"><label>Nettovolumen</label><input type="number" min="1" inputmode="decimal" class="input-styled" style="width:110px;" placeholder="z. B. 400" value="${appSettings.volume || ''}" onchange="setVolume(this.value)"><span>Liter</span></div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Wassermenge im System ohne Gestein und Sand (Becken plus Technikbecken).</div>`;
+            let aioHtml = '';
+            {
+                const a = appSettings.products.aio_up || {}, units = ['ml', 'g', 'Tropfen', 'Tabletten'];
+                aioHtml = `<div class="prod-block" style="border-color:${paramColors.aio};">
+                    <div class="prod-title" style="color:${paramColors.aio}">🧪 All4Reef (A4R)</div>
+                    ${doseBlockHtml('aio_up', a)}
+                </div>`;
+            }
+            Object.keys(REC.slots).forEach(k => {
+                REC.slots[k].forEach(dir => {
+                    const slot = k + '_' + dir;
+                    const p = appSettings.products[slot] || {};
+                    const cfg = thresholds[k];
+                    if (k === 'kh' && dir === 'up') html += aioHtml;
+                    if (dir === 'up' && p.aio) {
+                        html += `<div class="prod-block"><div class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ⬆️ erhöhen</div><div class="rec-meta">Wird über dein All-in-One-Produkt „${escapeHtml(p.name)}“ dosiert (siehe oben).</div></div>`;
+                        return;
+                    }
+                    const units = ['ml', 'g', 'Tropfen', 'Tabletten'];
+                    html += `<div class="prod-block">
+                        <div class="prod-title" style="color:${paramColors[k]}">${cfg.label} · ${dir === 'up' ? '⬆️ erhöhen' : '⬇️ senken'}</div>
+                        <input type="text" class="input-styled" placeholder="Produktname" value="${escapeHtml(p.name || '')}" onchange="setProduct('${slot}','name',this.value)">
+                        <div class="prod-line">
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="1" value="${p.amount || ''}" onchange="setProduct('${slot}','amount',this.value)">
+                            <select class="input-styled" onchange="setProduct('${slot}','unit',this.value)">${units.map(u => `<option${(p.unit || 'ml') === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
+                            <span>${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um</span>
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${cfg.unit === 'psu' ? '1' : '0,1'}" value="${p.effect || ''}" onchange="setProduct('${slot}','effect',this.value)">
+                            <span>${cfg.unit} in</span>
+                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
+                            <span>Litern</span>
+                        </div>
+                        ${(DAILY_PARAMS.includes(k) && dir === 'up') ? doseBlockHtml(slot, p) : ''}
                     </div>`;
                 });
             });
@@ -2969,7 +3013,7 @@
             {
                 const nowTs = Date.now();
                 const rowsD = [];
-                DOSE_PARAMS.forEach(k => {
+                doseActive().forEach(k => {
                     const p = (appSettings.products && appSettings.products[k + '_up']) || {};
                     if (p.mode === 'once') {
                         const g = lastGabe(k + '_up');
@@ -2990,7 +3034,7 @@
                     const fd = ts => { const d = new Date(ts); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`; };
                     rowsD.forEach(r => {
                         ensure(18);
-                        text(dc[0] + 3, y - 10, thresholds[r.k].label, 9.5, 'F2');
+                        text(dc[0] + 3, y - 10, doseLabel(r.k), 9.5, 'F2');
                         text(dc[1] + 3, y - 10, (r.p.name || '-').slice(0, 30), 9);
                         const u = r.p.unit || 'ml';
                         text(dc[2] + 3, y - 10, r.cur ? (r.cur.v > 0 ? `${num(r.cur.v)} ${u} ${r.cur.once ? '(letzte Einmal-Gabe)' : 'pro Tag'}` : 'keine Dosierung') : '-', 9.5, 'F2');
@@ -3044,7 +3088,7 @@
                         const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
                         const cw = W - 2 * M, ch = cw * lh / lw;
                         const rn = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[doseRange] || doseRange + ' Tage';
-                        const cap = wrap(`Zeitraum: ${rn} · ${doseMode(series) === 'pct' ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : doseMode(series) === 'log' ? 'Logarithmische Mengenachse. ' : ''}Parameter: ${series.map(q => thresholds[q.k].label).join(', ')}`, 9, false, W - 2 * M);
+                        const cap = wrap(`Zeitraum: ${rn} · ${doseMode(series) === 'pct' ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : doseMode(series) === 'log' ? 'Logarithmische Mengenachse. ' : ''}Parameter: ${series.map(q => doseLabel(q.k)).join(', ')}`, 9, false, W - 2 * M);
                         ensure(ch + cap.length * 12 + 8);
                         cap.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
                         y -= 4;
@@ -3064,7 +3108,7 @@
                             const d = new Date(e.ts);
                             ensure(16);
                             text(lc[0] + 3, y - 9, `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`, 9);
-                            text(lc[1] + 3, y - 9, thresholds[k] ? thresholds[k].label : k, 9, 'F2');
+                            text(lc[1] + 3, y - 9, doseLabel(k), 9, 'F2');
                             text(lc[2] + 3, y - 9, (p.name || '-').slice(0, 32), 9);
                             text(lc[3] + 3, y - 9, e.kind === 'once' ? `${num(e.v)} ${p.unit || 'ml'} Einmal-Gabe` : (e.v > 0 ? `${num(e.v)} ${p.unit || 'ml'} pro Tag` : 'keine Dosierung'), 9);
                             hline(y - 12);
@@ -3379,7 +3423,7 @@
         }
 
         // ===== Trend-Verlaufskurve =====
-        const paramColors = { sal: '#00f2fe', kh: '#00ff87', ca: '#d4ff3f', mg: '#a18cd1', no3: '#ffa94d', po4: '#ff0844', temp: '#e0e6ee', ph: '#ff6ec7' };
+        const paramColors = { aio: '#5ee6c6', sal: '#00f2fe', kh: '#00ff87', ca: '#d4ff3f', mg: '#a18cd1', no3: '#ffa94d', po4: '#ff0844', temp: '#e0e6ee', ph: '#ff6ec7' };
         const DAY_MS = 86400000;
         let chartPrefs = loadChartPrefs();
         let chartWindow = { start: 0, end: 1, days: 7, ticks: [] };
