@@ -526,6 +526,8 @@
         details.prod-acc > summary::before { content: '▸'; font-size: 0.9rem; transition: transform 0.15s; flex: none; }
         details.prod-acc[open] > summary::before { transform: rotate(90deg); }
         details.prod-acc[open] > summary { margin-bottom: 6px; }
+        .calc-box { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); }
+        .calc-res { font-weight: 700; color: var(--accent, #4fe3c1); }
         .prod-sum { margin-left: auto; font-weight: 500; font-size: 0.78rem; color: var(--text-muted); text-align: right; }
         .prod-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 8px; font-size: 0.85rem; }
         .prod-line input { width: 82px; }
@@ -1076,11 +1078,39 @@
         const psu2dens = p => interp(SAL_PSU, SAL_DENS, p);
         const dens2psu = d => interp(SAL_DENS, SAL_PSU, d);
         const sg2psu = d => interp(SAL_SG, SAL_PSU, d);
+        // Nanoriffe-Tabelle: Dichte (kg/m³) in Abhängigkeit von Salinität (30-38 psu) und Temperatur (20-30 °C)
+        const DT_S = [30, 31, 32, 33, 34, 35, 36, 37, 38];
+        const DT_T = [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+        const DT = [
+            [1020.95, 1021.72, 1022.48, 1023.24, 1024.00, 1024.76, 1025.53, 1026.29, 1027.05],
+            [1020.69, 1021.45, 1022.21, 1022.97, 1023.73, 1024.50, 1025.26, 1026.02, 1026.78],
+            [1020.43, 1021.18, 1021.94, 1022.70, 1023.46, 1024.22, 1024.98, 1025.74, 1026.50],
+            [1020.15, 1020.90, 1021.66, 1022.42, 1023.18, 1023.94, 1024.69, 1025.45, 1026.21],
+            [1019.86, 1020.62, 1021.37, 1022.13, 1022.89, 1023.64, 1024.40, 1025.16, 1025.92],
+            [1019.57, 1020.32, 1021.08, 1021.83, 1022.59, 1023.34, 1024.10, 1024.89, 1025.61],
+            [1019.27, 1020.02, 1020.77, 1021.53, 1022.28, 1023.04, 1023.79, 1024.55, 1025.30],
+            [1018.96, 1019.71, 1020.46, 1021.21, 1021.97, 1022.72, 1023.47, 1024.23, 1024.98],
+            [1018.64, 1019.39, 1020.14, 1020.89, 1021.65, 1022.40, 1023.15, 1023.90, 1024.65],
+            [1018.32, 1019.07, 1019.82, 1020.57, 1021.32, 1022.07, 1022.82, 1023.57, 1024.32],
+            [1017.99, 1018.73, 1019.48, 1020.23, 1020.98, 1021.73, 1022.48, 1023.23, 1023.98]
+        ];
+        function dtIdx(arr, x) { let i = 0; while (i < arr.length - 2 && x > arr[i + 1]) i++; return i; }
+        function psu2densT(p, T) {
+            const i = dtIdx(DT_T, T), j = dtIdx(DT_S, p);
+            const ft = (T - DT_T[i]) / (DT_T[i + 1] - DT_T[i]), fs = (p - DT_S[j]) / (DT_S[j + 1] - DT_S[j]);
+            const a = DT[i][j] + (DT[i][j + 1] - DT[i][j]) * fs, b = DT[i + 1][j] + (DT[i + 1][j + 1] - DT[i + 1][j]) * fs;
+            return a + (b - a) * ft;
+        }
+        function dens2psuT(d, T) {
+            let lo = 20, hi = 45;
+            for (let n = 0; n < 50; n++) { const m = (lo + hi) / 2; if (psu2densT(m, T) < d) lo = m; else hi = m; }
+            return (lo + hi) / 2;
+        }
         const SYR_DEC = { kh: 1, ca: 0, mg: 0 };
         const M = (id, label, extra) => Object.assign({ id, label }, extra || {});
         const METHODS = {
             kh: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('salifert_val', 'Salifert (Wert)'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
-            sal: [M('refraktometer', 'Refraktometer'), M('araeo', 'Aräometer (Dichte)', { conv: 'dens', inLabel: 'Dichte in kg/m³', ph: 'z. B. 1023,3' }), M('araeo_sg', 'Aräometer (spez. Gewicht)', { conv: 'sg', inLabel: 'Spez. Gewicht', ph: 'z. B. 1026,4' }), M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('other', 'Sonstiges')],
+            sal: [M('refraktometer', 'Refraktometer'), M('araeo', 'Aräometer (Dichte)', { conv: 'dens', inLabel: 'Dichte in kg/m³', ph: 'z. B. 1023,3' }), M('araeo_t', 'Aräometer (Dichte, temperaturabhängig)', { conv: 'denst', inLabel: 'Dichte in kg/m³', ph: 'z. B. 1023,3' }), M('araeo_sg', 'Aräometer (spez. Gewicht)', { conv: 'sg', inLabel: 'Spez. Gewicht', ph: 'z. B. 1026,4' }), M('hanna', 'Hanna Checker'), M('sonde', 'Digitale Sonde'), M('other', 'Sonstiges')],
             ca: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,15' }), M('salifert_val', 'Salifert (Wert)'), M('hanna', 'Hanna Checker'), M('jbl', 'JBL (Tropfen)', { conv: 'drops', factor: 20, inLabel: 'Tropfen', ph: 'z. B. 21' }), M('other', 'Sonstiges')],
             mg: [M('salifert', 'Salifert (Spritze)', { conv: 'syringe', inLabel: 'Spritze in ml', ph: 'z. B. 0,25' }), M('salifert_val', 'Salifert (Wert)'), M('tropicmarin', 'Tropic Marin'), M('hanna', 'Hanna Checker'), M('other', 'Sonstiges')],
             no3: [M('hanna', 'Hanna Checker'), M('salifert', 'Salifert'), M('tropicmarin', 'Tropic Marin'), M('other', 'Sonstiges')],
@@ -1092,7 +1122,8 @@
         function saveMethodMemory() { try { localStorage.setItem('pepeaqua_methods', JSON.stringify(methodMemory)); } catch (e) {} }
         function methodOf(k, id) { return METHODS[k].find(m => m.id === id) || METHODS[k][0]; }
 
-        function convertRaw(k, mid, rawStr) {
+        function salTemp(id) { const t = document.getElementById(id ? 'dn_tv' : 'val_temp'), e = document.getElementById(id || 'saltemp'); const x = parseFloat(String((e && e.value) || '').replace(',', '.')); if (isFinite(x)) return x; const y = t ? parseFloat(String(t.value).replace(',', '.')) : NaN; return isFinite(y) ? y : 25; }
+        function convertRaw(k, mid, rawStr, T) {
             const n = parseFloat(String(rawStr).replace(',', '.'));
             if (!isFinite(n)) return { error: 'Bitte eine Zahl eingeben.' };
             const m = methodOf(k, mid);
@@ -1106,6 +1137,13 @@
             if (m.conv === 'drops') {
                 if (n < 0) return { error: 'Die Tropfenzahl darf nicht negativ sein.' };
                 return { value: Math.round(n * m.factor * 10) / 10, converted: true };
+            }
+            if (m.conv === 'denst') {
+                let x = n; if (x > 0 && x < 2) x *= 1000;
+                if (x < 1005 || x > 1040) return { error: 'Bitte einen Wert zwischen 1005 und 1040 eingeben (z. B. 1023,3).' };
+                const t = isFinite(T) ? T : 25;
+                if (t < 5 || t > 40) return { error: 'Bitte eine Wassertemperatur zwischen 5 und 40 °C angeben.' };
+                return { value: Math.round(dens2psuT(x, t) * 100) / 100, converted: true, temp: t };
             }
             if (m.conv === 'dens' || m.conv === 'sg') {
                 let x = n; if (x > 0 && x < 2) x *= 1000;
@@ -1131,6 +1169,7 @@
                 const i = document.getElementById('val_' + k), m = document.getElementById('meth_' + k);
                 if (i) keep[k] = { raw: i.value, m: m ? m.value : null };
             });
+            { const st = document.getElementById('saltemp'); if (st) keep.saltemp = st.value; }
             const field = k => {
                 const cfg = thresholds[k];
                 const mid = (keep[k] && keep[k].m) || methodMemory[k] || METHODS[k][0].id;
@@ -1142,6 +1181,7 @@
                     <label style="color:var(--color-${k})">${lbl}</label>
                     ${heim ? `<select id="meth_${k}" class="input-styled meth-sel" onchange="onMethodChange('${k}')">${opts}</select>` : ''}
                     <input type="number" step="any" inputmode="decimal" id="val_${k}" class="input-styled" placeholder="${ph}" value="${keep[k] ? keep[k].raw : ''}" oninput="onRawInput('${k}')">
+                    ${(heim && m.conv === 'denst') ? `<input type="number" step="any" inputmode="decimal" id="saltemp" class="input-styled" style="margin-top:6px;" placeholder="Wassertemperatur °C (leer = Temperaturfeld/25)" value="${keep.saltemp || ''}" oninput="onRawInput('sal')">` : ''}
                     <div class="val-prev" id="prev_${k}"></div>
                 </div>`;
             };
@@ -1153,6 +1193,7 @@
             methodMemory[k] = mid; saveMethodMemory();
             const m = methodOf(k, mid), inp = document.getElementById('val_' + k);
             inp.placeholder = m.ph || { kh: 'z. B. 7,5', sal: 'z. B. 35', ca: 'z. B. 420', mg: 'z. B. 1350', no3: 'z. B. 5', po4: 'z. B. 0,04', temp: 'z. B. 25', ph: 'z. B. 8,2' }[k];
+            if (k === 'sal') { renderValueFields(); return; }
             onRawInput(k);
         }
         function onRawInput(k) {
@@ -1162,10 +1203,10 @@
             const m = methodOf(k, sel.value);
             if (!m.conv) { prev.textContent = ''; prev.classList.remove('err'); return; }
             if (inp.value === '') { prev.textContent = m.inLabel ? `Eingabe: ${m.inLabel}` : ''; prev.classList.remove('err'); return; }
-            const c = convertRaw(k, sel.value, inp.value);
+            const c = convertRaw(k, sel.value, inp.value, m.conv === 'denst' ? salTemp() : undefined);
             if (c.error) { prev.textContent = c.error; prev.classList.add('err'); return; }
             prev.classList.remove('err');
-            prev.textContent = `${m.inLabel}: ${inp.value} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
+            prev.textContent = `${m.inLabel}: ${inp.value}${c.temp !== undefined ? ' bei ' + fmtNum(c.temp) + ' °C' : ''} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
         }
 
         function setRecordType(type) {
@@ -1373,17 +1414,17 @@
             prev.classList.remove('err');
             if (!m.conv) { prev.textContent = ''; return; }
             if (inp.value === '') { prev.textContent = m.inLabel ? 'Eingabe: ' + m.inLabel : ''; return; }
-            const c = convertRaw(k, sel.value, inp.value);
+            const c = convertRaw(k, sel.value, inp.value, m.conv === 'denst' ? salTemp('dn_st') : undefined);
             if (c.error) { prev.textContent = c.error; prev.classList.add('err'); return; }
-            prev.textContent = `${m.inLabel}: ${inp.value} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
+            prev.textContent = `${m.inLabel}: ${inp.value}${c.temp !== undefined ? ' bei ' + fmtNum(c.temp) + ' °C' : ''} = ${fmtNum(c.value)} ${thresholds[k].unit}`;
         }
-        function detailNewMethod() { methodMemory[detailK] = document.getElementById('dn_m').value; saveMethodMemory(); detailNewPrev(); }
+        function detailNewMethod() { methodMemory[detailK] = document.getElementById('dn_m').value; saveMethodMemory(); const st = document.getElementById('dn_stw'); if (st) st.style.display = methodOf(detailK, document.getElementById('dn_m').value).conv === 'denst' ? 'block' : 'none'; detailNewPrev(); }
         function detailNewSave() {
             const k = detailK, mid = document.getElementById('dn_m').value, rv = document.getElementById('dn_v').value;
             const dt = document.getElementById('dn_d').value, tm = document.getElementById('dn_t').value;
             if (rv === '') { alert('Bitte einen Wert eingeben.'); return; }
             if (!dt) { alert('Bitte ein Datum angeben.'); return; }
-            const c = convertRaw(k, mid, rv);
+            const c = convertRaw(k, mid, rv, methodOf(k, mid).conv === 'denst' ? salTemp('dn_st') : undefined);
             if (c.error) { alert(thresholds[k].label + ': ' + c.error); return; }
             const m = methodOf(k, mid);
             const values = {}; Object.keys(thresholds).forEach(x => { values[x] = null; });
@@ -1424,7 +1465,7 @@
                 <div class="rec-meta" style="margin-bottom:12px;">Soll: ${fmtNum(e.minOpt)}–${fmtNum(e.maxOpt)}${unit}${lv ? ' · gemessen ' + lv.date.split('-').reverse().join('.') + (lv.time ? ' ' + lv.time : '') : ''}</div>
                 <div class="detail-h">Neue Messung eintragen</div>
                 <div class="form-group"><select id="dn_m" class="input-styled meth-sel" onchange="detailNewMethod()">${METHODS[k].map(x => `<option value="${x.id}"${x.id === methodOf(k, methodMemory[k] || METHODS[k][0].id).id ? ' selected' : ''}>${x.label}</option>`).join('')}</select></div>
-                <div class="form-group"><input type="number" step="any" inputmode="decimal" id="dn_v" class="input-styled" placeholder="${methodOf(k, methodMemory[k] || METHODS[k][0].id).ph || DEF_PH[k]}" oninput="detailNewPrev()"><div class="val-prev" id="dn_p"></div></div>
+                <div class="form-group"><input type="number" step="any" inputmode="decimal" id="dn_v" class="input-styled" placeholder="${methodOf(k, methodMemory[k] || METHODS[k][0].id).ph || DEF_PH[k]}" oninput="detailNewPrev()"><div id="dn_stw" style="display:${methodOf(k, methodMemory[k] || METHODS[k][0].id).conv === 'denst' ? 'block' : 'none'};margin-top:6px;"><input type="number" step="any" inputmode="decimal" id="dn_st" class="input-styled" placeholder="Wassertemperatur °C (leer = 25)" oninput="detailNewPrev()"></div><div class="val-prev" id="dn_p"></div></div>
                 <div class="form-row-grid"><div class="form-group"><input type="date" id="dn_d" class="input-styled" value="${isoToday()}"></div><div class="form-group"><input type="time" id="dn_t" class="input-styled" value="${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}"></div></div>
                 <button type="button" class="btn-submit" onclick="detailNewSave()">💾 Eintragen</button>
                 ${detailMsg ? `<div class="rec-meta" style="color:var(--status-green);margin-top:6px;">${detailMsg}</div>` : ''}
@@ -1447,7 +1488,7 @@
                 if (rv === '') { values[k] = null; continue; }
                 if (heim) {
                     const mid = document.getElementById('meth_' + k).value;
-                    const c = convertRaw(k, mid, rv);
+                    const c = convertRaw(k, mid, rv, methodOf(k, mid).conv === 'denst' ? salTemp() : undefined);
                     if (c.error) { alert(thresholds[k].label + ': ' + c.error); inp.focus(); return; }
                     values[k] = String(c.value);
                     if (c.converted) raw[k] = rv;
@@ -1792,10 +1833,36 @@
         }
 
         const thrErr = {};
+        function salRefT(u) { return isFinite(u && u.refT) ? u.refT : 25; }
+        function salD2P(u, d) { return u && u.unit === 'denst' ? dens2psuT(d, salRefT(u)) : dens2psu(d); }
+        function salP2D(u, p) { return u && u.unit === 'denst' ? psu2densT(p, salRefT(u)) : psu2dens(p); }
+        function setSalRefT(v) {
+            const n = parseFloat(String(v).replace(',', '.')), u = Object.assign({}, userThr.sal || {});
+            if (isFinite(n) && n >= 5 && n <= 40) u.refT = n; else delete u.refT;
+            userThr.sal = u; saveThr(); refreshAfterThr();
+        }
+        const salCalcSt = { t: '25', d: '', p: '' };
+        function salCalc(src) {
+            const g = id => parseFloat(String((document.getElementById(id) || {}).value || '').replace(',', '.'));
+            const T = g('sc_t'), d = g('sc_d'), p = g('sc_p');
+            const out = document.getElementById('sc_r');
+            if (!isFinite(T)) { out.textContent = 'Bitte eine Temperatur eingeben.'; return; }
+            if (src === 'p') {
+                if (!isFinite(p)) { out.textContent = ''; return; }
+                const dd = Math.round(psu2densT(p, T) * 100) / 100; document.getElementById('sc_d').value = String(dd).replace('.', ',');
+                salCalcSt.d = document.getElementById('sc_d').value; salCalcSt.p = document.getElementById('sc_p').value; salCalcSt.t = document.getElementById('sc_t').value;
+                out.innerHTML = `${fmtNum(p)} psu bei ${fmtNum(T)} °C = <b>${fmtNum(dd)} kg/m³</b>`;
+            } else {
+                if (!isFinite(d)) { out.textContent = ''; return; }
+                const pp = Math.round(dens2psuT(d, T) * 100) / 100; document.getElementById('sc_p').value = String(pp).replace('.', ',');
+                salCalcSt.d = document.getElementById('sc_d').value; salCalcSt.p = document.getElementById('sc_p').value; salCalcSt.t = document.getElementById('sc_t').value;
+                out.innerHTML = `Dichte ${fmtNum(d)} kg/m³ bei ${fmtNum(T)} °C = <b>${fmtNum(pp)} psu</b>`;
+            }
+        }
         function setThr(k, field, v) {
             let n = parseFloat(String(v).replace(',', '.'));
             const u = Object.assign({}, userThr[k] || {});
-            if (k === 'sal' && u.unit === 'dens' && isFinite(n)) n = Math.round(dens2psu(n) * 1000) / 1000;
+            if (k === 'sal' && (u.unit === 'dens' || u.unit === 'denst') && isFinite(n)) n = Math.round(salD2P(u, n) * 1000) / 1000;
             if (isFinite(n)) u[field] = n; else delete u[field];
             const err = validateThr(k, u);
             if (err) { thrErr[k] = err; renderTargetRows(); return; }
@@ -1806,10 +1873,10 @@
         }
         function setSalUnit(unit) {
             const u = Object.assign({}, userThr.sal || {});
-            if (unit === 'dens') {
-                u.unit = 'dens';
-                if (u.minOpt === undefined && u.maxOpt === undefined) { u.minOpt = Math.round(dens2psu(1022.5) * 1000) / 1000; u.maxOpt = Math.round(dens2psu(1024.1) * 1000) / 1000; }
-            } else delete u.unit;
+            if (unit === 'dens' || unit === 'denst') {
+                u.unit = unit;
+                if (u.minOpt === undefined && u.maxOpt === undefined) { u.minOpt = Math.round(salD2P(u, 1022.5) * 1000) / 1000; u.maxOpt = Math.round(salD2P(u, 1024.1) * 1000) / 1000; }
+            } else { delete u.unit; delete u.refT; }
             delete thrErr.sal;
             if (Object.keys(u).length) userThr.sal = u; else delete userThr.sal;
             saveThr(); refreshAfterThr();
@@ -1824,14 +1891,22 @@
             const box = document.getElementById('targetRows');
             if (!box) return;
             let dens = false;
-            const cv = (k, x) => (k === 'sal' && dens && x !== undefined) ? Math.round(psu2dens(x) * 10) / 10 : x;
+            const cv = (k, x) => (k === 'sal' && dens && x !== undefined) ? Math.round(salP2D(userThr.sal, x) * 10) / 10 : x;
             const fld = (k, f, label, val, ph) => `<div><label>${label}</label><input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="${ph}" value="${val === undefined ? '' : cv(k, val)}" onchange="setThr('${k}','${f}',this.value)"></div>`;
             box.innerHTML = Object.keys(thresholds).map(k => {
-                dens = k === 'sal' && (userThr.sal || {}).unit === 'dens';
+                dens = k === 'sal' && ['dens', 'denst'].includes((userThr.sal || {}).unit);
                 const cfg = thresholds[k], e = effectiveThr(k), custom = !!userThr[k];
+                const denT = k === 'sal' && (userThr.sal || {}).unit === 'denst';
                 const unit = cfg.unit ? ' (' + (dens ? 'kg/m³ Dichte' : cfg.unit) + ')' : '';
                 const ex = userThr[k] || {};
-                const unitSw = k === 'sal' ? `<div class="prod-line" style="margin-bottom:6px;"><span>Einheit:</span><select class="input-styled" onchange="setSalUnit(this.value)"><option value="psu"${dens ? '' : ' selected'}>psu (Salinität)</option><option value="dens"${dens ? ' selected' : ''}>Dichte (Aräometer, kg/m³)</option></select></div>` : '';
+                const su = (userThr.sal || {}).unit || 'psu';
+                const unitSw = k === 'sal' ? `<div class="prod-line" style="margin-bottom:6px;"><span>Einheit:</span><select class="input-styled" onchange="setSalUnit(this.value)"><option value="psu"${su === 'psu' ? ' selected' : ''}>psu (Salinität)</option><option value="dens"${su === 'dens' ? ' selected' : ''}>Dichte (Aräometer, kg/m³, bei 25 °C)</option><option value="denst"${su === 'denst' ? ' selected' : ''}>Dichte, temperaturabhängig (kg/m³)</option></select></div>
+                    ${su === 'denst' ? `<div class="prod-line" style="margin-bottom:6px;"><span>Bei Temperatur:</span><input type="number" step="any" inputmode="decimal" class="input-styled" style="width:90px;" value="${salRefT(userThr.sal)}" onchange="setSalRefT(this.value)"><span>°C (Dichte-Sollwerte gelten bei dieser Temperatur)</span></div>` : ''}
+                    <div class="calc-box" style="margin-bottom:8px;"><div style="font-weight:700;margin-bottom:4px;">🌡️ Dichte & Salinität umrechnen (temperaturabhängig)</div>
+                        <div class="prod-line"><span>Temperatur</span><input type="number" step="any" inputmode="decimal" id="sc_t" class="input-styled" style="width:80px;" value="${salCalcSt.t}" oninput="salCalc('d')"><span>°C</span></div>
+                        <div class="prod-line"><span>Dichte</span><input type="text" inputmode="decimal" id="sc_d" class="input-styled" style="width:110px;" placeholder="z. B. 1023,3" value="${salCalcSt.d}" oninput="salCalc('d')"><span>kg/m³</span><span>⇄</span><input type="text" inputmode="decimal" id="sc_p" class="input-styled" style="width:90px;" placeholder="z. B. 35" value="${salCalcSt.p}" oninput="salCalc('p')"><span>psu</span></div>
+                        <div class="calc-res" id="sc_r"></div>
+                        <div class="rec-meta">Nach der Nanoriffe-Tabelle (20–30 °C, 30–38 psu). Du kannst Dichte oder Salinität eingeben, die andere Seite wird berechnet.</div></div>` : '';
                 const sum = (e.minOpt !== undefined && e.maxOpt !== undefined) ? fmtNum(cv(k, e.minOpt)) + ' – ' + fmtNum(cv(k, e.maxOpt)) : '';
                 return `<details class="prod-block prod-acc"${(prodOpen.has('thr_' + k) || thrErr[k]) ? ' open' : ''} ontoggle="prodToggle('thr_${k}',this.open)">
                     <summary class="prod-title" style="color:${paramColors[k]}">${cfg.label}${custom ? '<span class="thr-tag">✎</span>' : ''}<span class="prod-sum">${sum}</span></summary>
@@ -2813,6 +2888,44 @@
                         <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`);
         }
 
+        function calcDose(slot, delta) {
+            const p = appSettings.products[slot] || {}, V = appSettings.volume;
+            if (!(p.effect > 0 && V > 0 && delta > 0)) return null;
+            return delta / p.effect * (p.amount > 0 ? p.amount : 1) * (V / (p.per > 0 ? p.per : 100));
+        }
+        function calcText(slot, delta) {
+            const p = appSettings.products[slot] || {}, r = calcDose(slot, delta);
+            return r === null ? '–' : `<b>${fmtNum(Math.round(r * 100) / 100)} ${escapeHtml(p.unit || 'ml')}</b> für ${fmtNum(appSettings.volume)} L`;
+        }
+        function calcApply(slot) {
+            const i = document.getElementById('cd_' + slot), g = document.getElementById('ga_' + slot);
+            const r = i ? calcDose(slot, parseFloat(String(i.value).replace(',', '.'))) : null;
+            if (g && r !== null) g.value = String(Math.round(r * 100) / 100); else alert('Bitte erst Nettovolumen, Produktwirkung und gewünschte Änderung eintragen.');
+        }
+        function calcUpdate(slot) {
+            const i = document.getElementById('cd_' + slot), o = document.getElementById('cr_' + slot);
+            if (i && o) o.innerHTML = calcText(slot, parseFloat(String(i.value).replace(',', '.')));
+        }
+        function calcHtml(slot, k, dir, p) {
+            const V = appSettings.volume, cfg = thresholds[k], u = escapeHtml(p.unit || 'ml');
+            if (!(V > 0)) return '<div class="rec-meta">🧮 Trage oben dein Nettovolumen ein, dann rechne ich dir die Menge aus.</div>';
+            if (!(p.effect > 0)) return '<div class="rec-meta">🧮 Trage oben ein, um wie viel das Produkt wirkt (z. B. 1 ml erhöht um … in … Litern), dann rechne ich dir die Menge für dein Becken aus.</div>';
+            const per1 = p.effect / (p.amount > 0 ? p.amount : 1) / ((V) / (p.per > 0 ? p.per : 100));
+            const lv = latestValue(k), e = effectiveThr(k);
+            const tgt = e.target !== undefined ? e.target : (e.minOpt + e.maxOpt) / 2;
+            let d = lv ? (dir === 'up' ? tgt - lv.v : lv.v - tgt) : 0;
+            d = d > 0 ? Math.round(d * 1000) / 1000 : '';
+            const verb = dir === 'up' ? 'erhöhen' : 'senken';
+            return `<div class="calc-box">
+                <div class="rec-meta">🧮 Bei ${fmtNum(V)} L: 1 ${u} ${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um etwa ${fmtNum(Math.round(per1 * 1000) / 1000)} ${cfg.unit}.</div>
+                <div class="prod-line"><span>${cfg.label} ${verb} um</span>
+                    <input type="number" step="any" inputmode="decimal" id="cd_${slot}" class="input-styled" value="${d}" placeholder="z. B. 5" oninput="calcUpdate('${slot}')">
+                    <span>${cfg.unit} →</span><span id="cr_${slot}" class="calc-res">${calcText(slot, d || 0)}</span></div>
+                ${(p.mode === 'once' && DAILY_PARAMS.includes(k) && dir === 'up') ? `<div style="margin-top:6px;"><button type="button" class="btn-note save" onclick="calcApply('${slot}')">↳ Menge in die Gabe übernehmen</button></div>` : ''}
+                ${d !== '' ? `<div class="rec-meta">Vorgeschlagen: bis zum Zielwert (${fmtNum(Math.round(tgt * 1000) / 1000)} ${cfg.unit}), ausgehend von deinem letzten Messwert (${fmtNum(lv.v)}). Du kannst die Zahl ändern.</div>` : ''}
+            </div>`;
+        }
+
         const prodOpen = new Set();
         function prodToggle(slot, open) { if (open) prodOpen.add(slot); else prodOpen.delete(slot); }
         function prodSummary(slot, p) {
@@ -2859,6 +2972,7 @@
                             <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="100" value="${p.per || ''}" onchange="setProduct('${slot}','per',this.value)">
                             <span>Litern</span>
                         </div>
+                        ${calcHtml(slot, k, dir, p)}
                         ${(DAILY_PARAMS.includes(k) && dir === 'up') ? doseBlockHtml(slot, p) : ''}
                     </details>`;
                 });
