@@ -2897,14 +2897,23 @@
             const p = appSettings.products[slot] || {}, r = calcDose(slot, delta);
             return r === null ? '–' : `<b>${fmtNum(Math.round(r * 100) / 100)} ${escapeHtml(p.unit || 'ml')}</b> für ${fmtNum(appSettings.volume)} L`;
         }
-        function calcApply(slot) {
-            const i = document.getElementById('cd_' + slot), g = document.getElementById('ga_' + slot);
-            const r = i ? calcDose(slot, parseFloat(String(i.value).replace(',', '.'))) : null;
-            if (g && r !== null) g.value = String(Math.round(r * 100) / 100); else alert('Bitte erst Nettovolumen, Produktwirkung und gewünschte Änderung eintragen.');
+        function calcDelta(slot) {
+            const g = id => { const e = document.getElementById(id); return e ? parseFloat(String(e.value).replace(',', '.')) : NaN; };
+            const a = g('cc_' + slot), t = g('ct_' + slot);
+            if (!isFinite(a) || !isFinite(t)) return null;
+            return slot.endsWith('_up') ? t - a : a - t;
         }
-        function calcUpdate(slot) {
-            const i = document.getElementById('cd_' + slot), o = document.getElementById('cr_' + slot);
-            if (i && o) o.innerHTML = calcText(slot, parseFloat(String(i.value).replace(',', '.')));
+        function calcShow(slot) {
+            const o = document.getElementById('cr_' + slot); if (!o) return;
+            const d = calcDelta(slot), p = appSettings.products[slot] || {}, k = slot.split('_')[0], cfg = thresholds[k];
+            if (d === null) { o.innerHTML = 'Bitte Messwert und Zielwert eintragen.'; return; }
+            if (d <= 0) { o.innerHTML = 'Zielwert ist bereits erreicht.'; return; }
+            const r = calcDose(slot, d);
+            o.innerHTML = r === null ? '–' : `${slot.endsWith('_up') ? '+' : '−'}${fmtNum(Math.round(d * 1000) / 1000)} ${cfg.unit} → ` + calcText(slot, d);
+        }
+        function calcApply(slot) {
+            const d = calcDelta(slot), r = d > 0 ? calcDose(slot, d) : null, g = document.getElementById('ga_' + slot);
+            if (g && r !== null) g.value = String(Math.round(r * 100) / 100); else alert('Bitte erst Nettovolumen, Produktwirkung, Messwert und Zielwert eintragen.');
         }
         function calcHtml(slot, k, dir, p) {
             const V = appSettings.volume, cfg = thresholds[k], u = escapeHtml(p.unit || 'ml');
@@ -2913,16 +2922,18 @@
             const per1 = p.effect / (p.amount > 0 ? p.amount : 1) / ((V) / (p.per > 0 ? p.per : 100));
             const lv = latestValue(k), e = effectiveThr(k);
             const tgt = e.target !== undefined ? e.target : (e.minOpt + e.maxOpt) / 2;
-            let d = lv ? (dir === 'up' ? tgt - lv.v : lv.v - tgt) : 0;
-            d = d > 0 ? Math.round(d * 1000) / 1000 : '';
-            const verb = dir === 'up' ? 'erhöhen' : 'senken';
+            const r3 = x => Math.round(x * 1000) / 1000;
+            let when = '';
+            if (lv) { const dd = String(lv.date || '').split('-').reverse().slice(0, 2).join('.'); when = dd ? ' (' + dd + ')' : ''; }
             return `<div class="calc-box">
-                <div class="rec-meta">🧮 Bei ${fmtNum(V)} L: 1 ${u} ${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um etwa ${fmtNum(Math.round(per1 * 1000) / 1000)} ${cfg.unit}.</div>
-                <div class="prod-line"><span>${cfg.label} ${verb} um</span>
-                    <input type="number" step="any" inputmode="decimal" id="cd_${slot}" class="input-styled" value="${d}" placeholder="z. B. 5" oninput="calcUpdate('${slot}')">
-                    <span>${cfg.unit} →</span><span id="cr_${slot}" class="calc-res">${calcText(slot, d || 0)}</span></div>
+                <div class="rec-meta">🧮 Bei ${fmtNum(V)} L: 1 ${u} ${dir === 'up' ? 'erhöht' : 'senkt'} ${cfg.label} um etwa ${fmtNum(r3(per1))} ${cfg.unit}.</div>
+                <div class="prod-line"><span>Letzter Messwert${when}</span>
+                    <input type="number" step="any" inputmode="decimal" id="cc_${slot}" class="input-styled" style="width:100px;" value="${lv ? r3(lv.v) : ''}" placeholder="aktuell" oninput="calcShow('${slot}')"><span>${cfg.unit}</span></div>
+                <div class="prod-line"><span>Zielwert</span>
+                    <input type="number" step="any" inputmode="decimal" id="ct_${slot}" class="input-styled" style="width:100px;" value="${r3(tgt)}" placeholder="Ziel" oninput="calcShow('${slot}')"><span>${cfg.unit}</span></div>
+                <div class="calc-res" id="cr_${slot}"></div>
                 ${(p.mode === 'once' && DAILY_PARAMS.includes(k) && dir === 'up') ? `<div style="margin-top:6px;"><button type="button" class="btn-note save" onclick="calcApply('${slot}')">↳ Menge in die Gabe übernehmen</button></div>` : ''}
-                ${d !== '' ? `<div class="rec-meta">Vorgeschlagen: bis zum Zielwert (${fmtNum(Math.round(tgt * 1000) / 1000)} ${cfg.unit}), ausgehend von deinem letzten Messwert (${fmtNum(lv.v)}). Du kannst die Zahl ändern.</div>` : ''}
+                <div class="rec-meta">${lv ? 'Der letzte Messwert wird automatisch eingesetzt, der Zielwert kommt aus den Sollwerten. Beides kannst du ändern.' : 'Noch keine Messung vorhanden – trage den aktuellen Wert selbst ein.'}</div>
             </div>`;
         }
 
@@ -2978,6 +2989,7 @@
                 });
             });
             document.getElementById('productRows').innerHTML = html;
+            document.querySelectorAll('#productRows [id^="cr_"]').forEach(el => calcShow(el.id.slice(3)));
         }
 
         // ===== PDF-Report (ohne Bibliothek, funktioniert auch als Home-Bildschirm-App) =====
