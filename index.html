@@ -2719,12 +2719,18 @@
             ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
             ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.lineWidth = 1;
             // Spuren: jeder Wert bekommt eine eigene Zeile mit eigener Skala
-            const laneYv = {};
+            const laneYv = {}, laneBot = {};
             if (mode === 'lanes') {
                 const n = series.length, gap = 12, lh = (ph - gap * (n - 1)) / n;
                 series.forEach((sr, idx) => {
-                    const top = T + idx * (lh + gap), bot = top + lh, mx = niceMax(sr.max * 1.2), col = paramColors[sr.k];
-                    laneYv[sr.k] = v => bot - 3 - Math.min(v / mx, 1) * (lh - 12);
+                    const top = T + idx * (lh + gap), bot = top + lh, col = paramColors[sr.k];
+                    // Skala der Zeile passt sich dem Wertebereich an, damit auch kleine Änderungen als sanfte Kurve sichtbar werden
+                    const vs = sr.pts.map(q => q.v), vlo = Math.min(...vs), vhi = Math.max(...vs);
+                    let lo2, hi2;
+                    if (vhi - vlo < 1e-9) { lo2 = Math.max(0, vhi * 0.5); hi2 = vhi * 1.5 || 1; }
+                    else { const pad = (vhi - vlo) * 0.6; lo2 = Math.max(0, vlo - pad); hi2 = vhi + pad; }
+                    laneYv[sr.k] = v => bot - 7 - Math.min(Math.max((v - lo2) / (hi2 - lo2), 0), 1) * (lh - 18); laneBot[sr.k] = bot;
+                    const rnd = x => fmtNum(Math.round(x * 100) / 100), rng = vhi - vlo < 1e-9 ? rnd(vhi) : rnd(vlo) + '–' + rnd(vhi);
                     ctx.fillStyle = 'rgba(255,255,255,0.035)'; ctx.fillRect(L, top, pw, lh);
                     ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.moveTo(L, bot); ctx.lineTo(W - R, bot); ctx.stroke();
@@ -2732,7 +2738,7 @@
                     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
                     let nm = String(doseLabel(sr.k)); if (nm.length > 9) nm = nm.slice(0, 8) + '…';
                     ctx.font = 'bold 10.5px system-ui, sans-serif'; ctx.fillStyle = col; ctx.fillText(nm, L - 14, top + lh / 2 - 7);
-                    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.fillText(`bis ${fmtNum(mx)} ${doseUnit(sr.k)}`, L - 14, top + lh / 2 + 7);
+                    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.fillText(`${rng} ${doseUnit(sr.k)}`, L - 14, top + lh / 2 + 7);
                 });
                 ctx.font = '11px system-ui, sans-serif'; ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)';
             }
@@ -2757,7 +2763,32 @@
             series.forEach(sr => {
                 const col = paramColors[sr.k];
                 const yv = mode === 'lanes' ? laneYv[sr.k] : (v => Y(v));
+                const base = mode === 'lanes' ? laneBot[sr.k] : T + ph;
+                const fillUnder = (x0, x1) => {
+                    const g = ctx.createLinearGradient(0, base - ph, 0, base);
+                    g.addColorStop(0, col + '38'); g.addColorStop(1, col + '00');
+                    ctx.lineTo(x1, base); ctx.lineTo(x0, base); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+                };
                 if (sr.bars) {
+                    // Einmal-Gaben: Punkte durch eine weiche Kurve verbinden
+                    const P = []; sr.pts.slice().sort((a, b) => a.ts - b.ts).forEach(q => { const x = X(q.ts), y = yv(q.v); if (!P.length || x - P[P.length - 1].x > 0.5) P.push({ x, y }); });
+                    if (P.length >= 2) {
+                        const n = P.length, sl = [], m = [];
+                        for (let k = 0; k < n - 1; k++) sl.push((P[k + 1].y - P[k].y) / (P[k + 1].x - P[k].x));
+                        m[0] = sl[0]; m[n - 1] = sl[n - 2];
+                        for (let k = 1; k < n - 1; k++) m[k] = sl[k - 1] * sl[k] <= 0 ? 0 : (sl[k - 1] + sl[k]) / 2;
+                        for (let k = 0; k < n - 1; k++) {
+                            if (sl[k] === 0) { m[k] = 0; m[k + 1] = 0; continue; }
+                            const a = m[k] / sl[k], b = m[k + 1] / sl[k], h = a * a + b * b;
+                            if (h > 9) { const t = 3 / Math.sqrt(h); m[k] = t * a * sl[k]; m[k + 1] = t * b * sl[k]; }
+                        }
+                        const trace = () => {
+                            ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y);
+                            for (let k = 0; k < n - 1; k++) { const d = P[k + 1].x - P[k].x; ctx.bezierCurveTo(P[k].x + d / 3, P[k].y + m[k] * d / 3, P[k + 1].x - d / 3, P[k + 1].y - m[k + 1] * d / 3, P[k + 1].x, P[k + 1].y); }
+                        };
+                        trace(); fillUnder(P[0].x, P[n - 1].x);
+                        trace(); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+                    }
                     sr.pts.forEach(q => {
                         const px = X(q.ts), py = yv(q.v);
                         ctx.fillStyle = col; ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 2;
@@ -2765,15 +2796,20 @@
                     });
                     return;
                 }
-                ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
-                ctx.beginPath();
-                sr.pts.forEach((q, i) => {
-                    const x = X(q.ts), y = yv(q.v);
-                    if (i === 0) ctx.moveTo(x, y); else { ctx.lineTo(x, yv(sr.pts[i - 1].v)); ctx.lineTo(x, y); }
-                });
-                const last = sr.pts[sr.pts.length - 1];
-                ctx.lineTo(X(to), yv(last.v));
-                ctx.stroke();
+                // Tagesdosis: Übergänge zwischen zwei Dosierungen als weiche S-Kurve (auch bei kleinen Änderungen)
+                const trace = () => {
+                    ctx.beginPath();
+                    sr.pts.forEach((q, i) => {
+                        const x = X(q.ts), y = yv(q.v);
+                        if (i === 0) { ctx.moveTo(x, y); return; }
+                        const px = X(sr.pts[i - 1].ts), py = yv(sr.pts[i - 1].v), w = Math.min(34, (x - px) * 0.85);
+                        ctx.lineTo(x - w, py);
+                        ctx.bezierCurveTo(x - w * 0.5, py, x - w * 0.5, y, x, y);
+                    });
+                    ctx.lineTo(X(to), yv(sr.pts[sr.pts.length - 1].v));
+                };
+                trace(); fillUnder(X(sr.pts[0].ts), X(to));
+                trace(); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
                 ctx.fillStyle = col;
                 sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 1.5; ctx.stroke(); });
             });
@@ -2872,7 +2908,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (doseLayoutMode(series) === 'lanes' ? 'Jeder Wert hat seine eigene Zeile mit eigener Skala (unter dem Namen steht der Höchstwert der Zeile), damit nichts übereinander liegt. Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (doseLayoutMode(series) === 'lanes' ? 'Jeder Wert hat seine eigene Zeile mit eigener Skala (unter dem Namen steht der Wertebereich der Zeile, die Höhe ist darauf angepasst), damit nichts übereinander liegt. Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
