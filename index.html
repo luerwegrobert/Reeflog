@@ -2749,60 +2749,49 @@
                 ctx.fillStyle = col;
                 sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 1.5; ctx.stroke(); });
             });
-            const layout = { from, to, L, R, W, pts: [] };
-            series.forEach(sr => sr.pts.forEach(q => layout.pts.push({ x: X(q.ts), ts: q.ts })));
-            // Punkte am linken Rand liegen exakt auf "from" des Zeitpunkts der letzten Zeichnung; beim nächsten Zeichnen ist "from" ein paar Millisekunden später -> Auswahl nicht verlieren
-            if (hover !== null && hover !== undefined && hover < from && hover >= from - DAY_MS / 2) hover = from;
-            if (hover !== null && hover !== undefined && hover >= from && hover <= to) {
-                layout.shown = true;
-                const hx = X(hover), d0 = new Date(hover);
-                ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-                ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
-                // Markierung auf jeder Linie an der angetippten Stelle (sichtbares Feedback für Tagesdosis & Einmal-Gaben)
-                series.forEach(sr => {
-                    const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
-                    let v = null;
-                    if (sr.bars) { const dd = startOfDay(hover), q = sr.pts.find(z => startOfDay(z.ts) === dd); if (q) v = q.v; }
-                    else { const e = doseValueAt(sr.k, hover); if (e && e.v > 0) v = e.v; }
-                    if (v === null) return;
-                    ctx.fillStyle = paramColors[sr.k]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(hx, yv(v), 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                });
-                const rows = [];
-                series.forEach(sr => {
-                    if (sr.bars) {
-                        const dd = startOfDay(hover), q = sr.pts.find(z => startOfDay(z.ts) === dd);
-                        rows.push({ dot: paramColors[sr.k], text: `${doseLabel(sr.k)}: ${q ? fmtNum(q.v) + ' ' + doseUnit(sr.k) + ' Einmal-Gabe' : 'keine Gabe an diesem Tag'}` });
-                        return;
-                    }
-                    const e = doseValueAt(sr.k, hover);
-                    if (!e) return;
-                    const sd = new Date(e.eff);
-                    rows.push({ dot: paramColors[sr.k], text: `${doseLabel(sr.k)}: ${e.v > 0 ? fmtNum(e.v) + ' ' + doseUnit(sr.k) + ' pro Tag' : 'keine Dosierung'} (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)` });
-                });
-                if (!rows.length) rows.push({ text: 'noch keine Dosierung erfasst' });
-                const title = `${pad2(d0.getDate())}.${pad2(d0.getMonth() + 1)}.${d0.getFullYear()}`;
-                const font = 'system-ui, sans-serif';
-                ctx.font = `bold 11px ${font}`;
-                let bw = ctx.measureText(title).width;
-                ctx.font = `11px ${font}`;
-                rows.forEach(r => { bw = Math.max(bw, ctx.measureText(r.text).width + (r.dot ? 12 : 0)); });
-                bw += 16;
-                const bh = 28 + 16 * rows.length;
-                const bx = Math.min(Math.max(hx - bw / 2, 4), W - bw - 4);
-                const by = Math.max(T + 4, 2);
-                ctx.fillStyle = 'rgba(2, 8, 19, 0.94)'; ctx.strokeStyle = 'rgba(79, 227, 238, 0.35)'; ctx.lineWidth = 1;
-                ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 8); else ctx.rect(bx, by, bw, bh);
-                ctx.fill(); ctx.stroke();
-                ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-                ctx.font = `bold 11px ${font}`; ctx.fillStyle = '#f0f4f8';
-                ctx.fillText(title, bx + 8, by + 14);
-                ctx.font = `11px ${font}`;
-                rows.forEach((r, i) => {
-                    const ry = by + 30 + 16 * i; let tx = bx + 8;
-                    if (r.dot) { ctx.fillStyle = r.dot; ctx.beginPath(); ctx.arc(bx + 12, ry, 3.5, 0, Math.PI * 2); ctx.fill(); tx = bx + 20; }
-                    ctx.fillStyle = '#f0f4f8'; ctx.fillText(r.text, tx, ry);
-                });
+            const layout = { from, to, L, R, W, pts: [], yv: {}, series, tip: null };
+            series.forEach(sr => {
+                const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                layout.yv[sr.k] = yv;
+                sr.pts.forEach(q => layout.pts.push({ x: X(q.ts), y: yv(q.v), ts: q.ts, k: sr.k }));
+            });
+            // Auswahl: {k, ts} - nur dieser eine Punkt bzw. diese eine Linie wird hervorgehoben
+            let sel = hover && typeof hover === 'object' ? { k: hover.k, ts: hover.ts } : null;
+            if (sel && sel.ts < from && sel.ts >= from - DAY_MS / 2) sel.ts = from;
+            const ssr = sel ? series.find(z => z.k === sel.k) : null;
+            if (ssr && sel.ts >= from && sel.ts <= to) {
+                const yv = layout.yv[ssr.k], hx = X(sel.ts), d0 = new Date(sel.ts);
+                let v = null, text = '';
+                if (ssr.bars) {
+                    const q = ssr.pts.reduce((b, z) => (!b || Math.abs(z.ts - sel.ts) < Math.abs(b.ts - sel.ts)) ? z : b, null);
+                    if (q) { v = q.v; text = `${doseLabel(ssr.k)}: ${fmtNum(q.v)} ${doseUnit(ssr.k)} Einmal-Gabe`; sel.ts = q.ts; d0.setTime(q.ts); }
+                } else {
+                    const e = doseValueAt(ssr.k, sel.ts);
+                    if (e && e.v > 0) { const sd = new Date(e.eff); v = e.v; text = `${doseLabel(ssr.k)}: ${fmtNum(e.v)} ${doseUnit(ssr.k)} pro Tag (seit ${pad2(sd.getDate())}.${pad2(sd.getMonth() + 1)}.)`; }
+                }
+                if (v !== null) {
+                    layout.shown = true;
+                    const hxx = X(sel.ts), py = yv(v);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                    ctx.beginPath(); ctx.moveTo(hxx, T); ctx.lineTo(hxx, T + ph); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.fillStyle = paramColors[ssr.k]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+                    ctx.beginPath(); ctx.arc(hxx, py, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                    const title = `${pad2(d0.getDate())}.${pad2(d0.getMonth() + 1)}.${d0.getFullYear()}`, font = 'system-ui, sans-serif', cx = '✕';
+                    ctx.font = `bold 11px ${font}`; let bw = ctx.measureText(title).width;
+                    ctx.font = `11px ${font}`; bw = Math.max(bw, ctx.measureText(text).width + 12) + 40;
+                    const bh = 46;
+                    const bx = Math.min(Math.max(hxx - bw / 2, 4), W - bw - 4);
+                    let by = py - bh - 16; if (by < T - 4) by = py + 16;
+                    if (by + bh > H - 2) by = Math.max(2, py - bh - 16);
+                    layout.tip = { x: bx, y: by, w: bw, h: bh };
+                    ctx.fillStyle = 'rgba(2, 8, 19, 0.95)'; ctx.strokeStyle = paramColors[ssr.k]; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 8); else ctx.rect(bx, by, bw, bh);
+                    ctx.fill(); ctx.stroke();
+                    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+                    ctx.font = `bold 11px ${font}`; ctx.fillStyle = '#f0f4f8'; ctx.fillText(title, bx + 8, by + 14);
+                    ctx.font = `11px ${font}`; ctx.fillStyle = paramColors[ssr.k]; ctx.fillText('●', bx + 8, by + 31); ctx.fillStyle = '#f0f4f8'; ctx.fillText(text, bx + 20, by + 31);
+                    ctx.font = `bold 14px ${font}`; ctx.fillStyle = 'rgba(240,244,248,0.7)'; ctx.textAlign = 'right'; ctx.fillText(cx, bx + bw - 10, by + 14);
+                }
             }
             return layout;
         }
@@ -2855,7 +2844,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe in die Grafik für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe in die Grafik für die genauen Werte.' : 'Tippe in die Grafik für den genauen Wert. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
@@ -2866,14 +2855,31 @@
         }
         function doseTap(ev) {
             if (!doseLayout) return;
-            const r = ev.currentTarget.getBoundingClientRect(), x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
-            const { from, to, L, R, W } = doseLayout;
-            // erst an den nächsten Punkt "einrasten" (großzügiger Fangbereich, auch am linken/rechten Rand und über den Achsenbeschriftungen)
-            let best = null, bd = 34;
-            (doseLayout.pts || []).forEach(q => { const d = Math.abs(q.x - x); if (d < bd) { bd = d; best = q; } });
-            if (best) doseHover = best.ts;
-            else if (x < L - 4 || x > W - R + 4) doseHover = null;
-            else doseHover = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+            const r = ev.currentTarget.getBoundingClientRect();
+            const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left, y = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
+            const lay = doseLayout, { from, to, L, R, W } = lay;
+            // Tipp auf das ✕ der Anzeige schließt sie (der Rest der Anzeige lässt Tipps auf Punkte/Linien darunter durch)
+            if (lay.tip && doseHover && x >= lay.tip.x + lay.tip.w - 46 && x <= lay.tip.x + lay.tip.w && y >= lay.tip.y && y <= lay.tip.y + lay.tip.h) { doseHover = null; renderDoseChart(); return; }
+            // 1) nächster Punkt (in zwei Richtungen gemessen, großzügiger Fangbereich)
+            let best = null, bd = 28;
+            lay.pts.forEach(q => { const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; best = q; } });
+            if (best) {
+                if (doseHover && doseHover.k === best.k && Math.abs(doseHover.ts - best.ts) < 36e5) doseHover = null;   // nochmal tippen = abwählen
+                else doseHover = { k: best.k, ts: best.ts };
+            } else {
+                // 2) Linie der Tagesdosis in Reichweite -> genau diese Linie an der getippten Stelle
+                let bl = null, ld = 22;
+                if (x >= L - 4 && x <= W - R + 4) {
+                    const ts = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+                    lay.series.forEach(sr => {
+                        if (sr.bars) return;
+                        const e = doseValueAt(sr.k, ts); if (!e || !(e.v > 0)) return;
+                        const d = Math.abs(lay.yv[sr.k](e.v) - y);
+                        if (d < ld) { ld = d; bl = { k: sr.k, ts }; }
+                    });
+                }
+                doseHover = bl;   // ins Leere getippt = abwählen
+            }
             renderDoseChart();
         }
 
