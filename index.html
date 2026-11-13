@@ -504,6 +504,16 @@
         .task-card .tk-chip.over { background: rgba(255,90,90,0.18); color: #ff9a9a; } .task-card .tk-chip.today { background: rgba(255,204,102,0.18); color: #ffd98a; }
         .task-card .tk-sub { font-size: 0.8rem; color: var(--text-muted); margin: 5px 0 10px; }
         .task-card .tk-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .ov-grp { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin: 14px 0 6px; }
+        .ov-row { border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; margin-bottom: 8px; background: rgba(255,255,255,0.025); }
+        .ov-row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 70px 1fr 14px; gap: 10px; align-items: center; padding: 10px 12px; }
+        .ov-row > summary::-webkit-details-marker { display: none; }
+        .ov-row .chev { color: var(--text-muted); transition: transform .2s; text-align: center; } .ov-row[open] .chev { transform: rotate(90deg); }
+        .ov-row .dt { font-size: 0.8rem; line-height: 1.25; } .ov-row .dt b { display: block; font-size: 0.95rem; }
+        .ov-row .dt.over b { color: #ff9a9a; } .ov-row .dt.today b { color: #ffd98a; }
+        .ov-row .nm { font-weight: 600; font-size: 0.95rem; word-break: break-word; } .ov-row .iv { font-size: 0.76rem; color: var(--text-muted); margin-top: 1px; }
+        .ov-row .ov-body.task-card { padding: 0 12px 12px; margin: 0; border: 0; background: none; border-radius: 0; }
+        .ov-row .rem-row { padding: 4px 0; } .ov-row .rem-row input[type=time] { width: 104px; }
         .tk-ov { margin-top: 14px; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; overflow: hidden; }
         .tk-ov .hd { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); padding: 8px 12px; background: rgba(255,255,255,0.04); }
         .tk-ov .row { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 9px 12px; border-top: 1px solid rgba(255,255,255,0.06); align-items: center; }
@@ -887,14 +897,15 @@
             </div>
             <div data-sub="rem" style="display:none;">
 <button type="button" class="sub-back" onclick="showSub('')">← Zurück zur Übersicht</button>
-            <div class="glass-panel" id="dueBanner" style="display: none;">
-                <div class="panel-title">⏰ Messung fällig</div>
-                <div id="dueList"></div>
+            <div class="glass-panel" id="ovPanel">
+                <div class="panel-title">⏰ Gesamtübersicht</div>
+                <div class="rec-meta" style="margin:-4px 0 6px;">Alle Messungen und Erinnerungen an einem Ort, nach Termin sortiert. Tippe auf einen Eintrag für Aktionen und Einstellungen.</div>
+                <div id="ovList"></div>
             </div>
 
-            <div class="glass-panel" id="taskPanel">
-                <div class="panel-title">📝 Eigene Erinnerungen</div>
-                <div class="tk-form">
+            <details class="glass-panel" id="newTaskPanel">
+                <summary style="cursor:pointer;font-weight:700;">➕ Neue Erinnerung anlegen</summary>
+                <div class="tk-form" style="margin-top:12px;">
                     <div><div class="lbl">Was?</div><input type="text" id="tk_text" class="input-styled" placeholder="z. B. Aktivkohle wechseln"></div>
                     <div><div class="lbl">Wiederholung</div><div id="tk_rep"></div></div>
                     <div class="two">
@@ -904,23 +915,23 @@
                     <div class="rec-meta" style="margin:-4px 0 0;">Datum leer = nächster passender Termin. Uhrzeit leeren = ganztägig.</div>
                     <button type="button" class="btn-note save tk-add" onclick="taskAdd()">➕ Erinnerung hinzufügen</button>
                 </div>
-                <div id="taskList"></div>
-                <div style="margin-top:16px;">
-                    <div class="lbl" style="font-size:0.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);">Hinweise</div>
-                    <label class="sw-row"><span><div class="sw-t">Hinweis oben in der App</div><div class="sw-s">Bleibt, bis du ihn wegklickst oder alles erledigt ist</div></span><span class="sw"><input type="checkbox" id="opt_banner" onchange="setRemOpt('remBanner', this.checked)"></span></label>
-                    <label class="sw-row"><span><div class="sw-t">Signalton</div><div class="sw-s">Einmal pro Tag beim ersten Hinweis</div></span><span class="sw"><input type="checkbox" id="opt_sound" onchange="setRemOpt('remSound', this.checked)"></span></label>
-                    <label class="sw-row"><span><div class="sw-t">Systemmitteilung</div><div class="sw-s">Beim Öffnen der App, braucht deine Erlaubnis</div></span><span class="sw"><input type="checkbox" id="opt_notify" onchange="setRemOpt('remNotify', this.checked)"></span></label>
-                    <details style="margin-top:6px;"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-muted);">Gut zu wissen</summary>
-                        <div class="rec-meta">Hinweis und Mitteilung erscheinen, sobald du die App öffnest oder wieder in den Vordergrund holst. Bei geschlossener App und gesperrtem Handy meldet sich nur der Kalender (📅). Auf dem iPhone braucht die Systemmitteilung die über „Zum Home-Bildschirm“ installierte App (iOS 16.4 oder neuer). Der Signalton wird auf dem iPhone manchmal blockiert, solange du die App noch nicht angetippt hast.</div></details>
-                    <button type="button" class="btn-note" style="margin-top:10px;" onclick="exportTaskIcs()">📅 Alle in den Kalender</button>
-                </div>
-            </div>
+            </details>
 
-            <details class="glass-panel" id="reminderSettings" open>
-                <summary id="remSummary" style="cursor: pointer; font-weight: 700;">⏰ Messerinnerungen einstellen</summary>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Alle wie viele Tage soll gemessen werden? Feld leer lassen = keine Erinnerung. Fällige Messungen erscheinen hier und als Zahl am Erinnerungen-Knopf an.</div>
+            <details class="glass-panel" id="reminderSettings">
+                <summary id="remSummary" style="cursor: pointer; font-weight: 700;">🧪 Messungen einrichten</summary>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Alle wie viele Tage und um welche Uhrzeit soll gemessen werden? Tage leer = keine Erinnerung.</div>
                 <div id="reminderRows"></div>
-                            </details>
+            </details>
+
+            <div class="glass-panel" id="hintPanel">
+                <div class="panel-title">🔔 Hinweise</div>
+                <label class="sw-row" style="border-top:0;"><span><div class="sw-t">Hinweis oben in der App</div><div class="sw-s">Bleibt, bis du ihn wegklickst oder alles erledigt ist</div></span><span class="sw"><input type="checkbox" id="opt_banner" onchange="setRemOpt('remBanner', this.checked)"></span></label>
+                <label class="sw-row"><span><div class="sw-t">Signalton</div><div class="sw-s">Einmal pro Tag beim ersten Hinweis</div></span><span class="sw"><input type="checkbox" id="opt_sound" onchange="setRemOpt('remSound', this.checked)"></span></label>
+                <label class="sw-row"><span><div class="sw-t">Systemmitteilung</div><div class="sw-s">Beim Öffnen der App, braucht deine Erlaubnis</div></span><span class="sw"><input type="checkbox" id="opt_notify" onchange="setRemOpt('remNotify', this.checked)"></span></label>
+                <details style="margin-top:6px;"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-muted);">Gut zu wissen</summary>
+                    <div class="rec-meta">Hinweis und Mitteilung erscheinen, sobald du die App öffnest oder wieder in den Vordergrund holst. Bei geschlossener App und gesperrtem Handy meldet sich nur der Kalender (📅). Auf dem iPhone braucht die Systemmitteilung die über „Zum Home-Bildschirm“ installierte App (iOS 16.4 oder neuer). Der Signalton wird auf dem iPhone manchmal blockiert, solange du die App noch nicht angetippt hast.</div></details>
+                <button type="button" class="btn-note" style="margin-top:10px;" onclick="exportTaskIcs()">📅 Alle eigenen Erinnerungen in den Kalender</button>
+            </div>
 
             </div>
             <div data-sub="bak" style="display:none;">
@@ -1764,9 +1775,22 @@
             return t;
         }
 
+        let remTimes = (() => { try { return JSON.parse(localStorage.getItem('pepeaqua_remtimes')) || {}; } catch (e) { return {}; } })();
+        function saveRemTime(k, v) { remTimes[k] = /^\d{2}:\d{2}$/.test(v) ? v : ''; try { localStorage.setItem('pepeaqua_remtimes', JSON.stringify(remTimes)); } catch (e) {} renderReminders(); }
+        function measDue(k) {
+            const last = lastMeasured(k), n = reminders[k], tm = remTimes[k] || '', at = tm ? ` um ${tm}` : '';
+            if (!last) return { ts: -1, d: -9999, cls: 'over', txt: 'noch keine Messung', never: true };
+            const day = addDaysTs(startOfDay(last), n), d = Math.round((day - startOfDay(Date.now())) / DAY_MS);
+            let ts = day; if (tm) { const x = new Date(day), p = tm.split(':'); x.setHours(+p[0], +p[1], 0, 0); ts = x.getTime(); }
+            if (d < -1) return { ts, d, cls: 'over', txt: `seit ${-d} Tagen überfällig` };
+            if (d === -1) return { ts, d, cls: 'over', txt: 'seit gestern überfällig' };
+            if (d === 0) { if (tm && Date.now() < ts) return { ts, d, cls: 'today', txt: `heute um ${tm}`, later: true }; return { ts, d, cls: 'today', txt: tm ? `heute fällig (${tm})` : 'heute fällig' }; }
+            if (d === 1) return { ts, d, cls: '', txt: `morgen${at}` };
+            return { ts, d, cls: '', txt: `in ${d} Tagen${at}` };
+        }
         function saveReminder(k, v) {
             const n = parseInt(v, 10);
-            if (n > 0) reminders[k] = Math.min(n, 365); else delete reminders[k];
+            if (n > 0) { reminders[k] = Math.min(n, 365); if (!remTimes[k]) { remTimes[k] = '09:00'; try { localStorage.setItem('pepeaqua_remtimes', JSON.stringify(remTimes)); } catch (e) {} } } else delete reminders[k];
             try { localStorage.setItem('pepeaqua_reminders', JSON.stringify(reminders)); } catch (e) {}
             renderReminders();
         }
@@ -1778,24 +1802,18 @@
                     <span>alle</span>
                     <input type="number" min="0" max="365" inputmode="numeric" class="input-styled" placeholder="–" value="${reminders[k] || ''}" onchange="saveReminder('${k}', this.value)">
                     <span>Tage</span>
+                    <input type="time" class="input-styled" style="width:104px;" value="${reminders[k] ? (remTimes[k] || '') : ''}" ${reminders[k] ? '' : 'disabled'} onchange="saveRemTime('${k}', this.value)">
                 </div>`).join('');
         }
 
         function renderReminders() {
-            const panel = document.getElementById('dueBanner');
             const today = startOfDay(Date.now());
             const items = [];
             Object.keys(reminders).forEach(k => {
                 if (!thresholds[k]) return;
-                const last = lastMeasured(k);
-                const label = `<b style="color:${paramColors[k]}">${thresholds[k].label}</b>`;
-                if (!last) { items.push({ d: -9999, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – noch keine Messung eingetragen` }); return; }
-                const dueDay = startOfDay(last) + reminders[k] * DAY_MS;
-                const d = Math.round((dueDay - today) / DAY_MS);
-                if (d < -1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – seit ${-d} Tagen überfällig` });
-                else if (d === -1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – seit gestern überfällig` });
-                else if (d === 0) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – heute fällig` });
-                else if (d === 1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – morgen fällig` });
+                const m = measDue(k), label = `<b style="color:${paramColors[k]}">${thresholds[k].label}</b>`, bt = thresholds[k].label + ' messen';
+                if (m.never) { items.push({ d: -9999, kind: 'meas', k, bt, html: `${label} – noch keine Messung eingetragen` }); return; }
+                if (m.d <= 1) items.push({ d: m.later ? 0.5 : m.d, kind: 'meas', k, bt, html: `${label} – ${m.txt}` });
             });
             tasks.forEach(t => {
                 const st = taskStatus(t), label = `<b>${escapeHtml(t.text)}</b>`;
@@ -1814,10 +1832,8 @@
             renderTasks();
             remPopRender();
             const active = Object.keys(reminders).filter(k => thresholds[k]).length;
-            document.getElementById('remSummary').textContent = active ? `⏰ Messerinnerungen (${active} aktiv) – einstellen` : '⏰ Messerinnerungen einstellen';
-            panel.style.display = items.length ? 'block' : 'none';
+            document.getElementById('remSummary').textContent = active ? `🧪 Messungen einrichten (${active} aktiv)` : '🧪 Messungen einrichten';
             setBadge('badgeRem', items.length);
-            document.getElementById('dueList').innerHTML = items.map(i => `<div class="due-item">${i.html}</div>`).join('');
         }
 
         // ===== Eigene Erinnerungen (frei beschriftbar, frei wiederkehrend) =====
@@ -1939,42 +1955,59 @@
         }
         function fmtDayLong(ts) { return new Date(ts).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }); }
         function renderTasks() {
-            const box = document.getElementById('taskList'); if (!box) return;
+            const box = document.getElementById('ovList'); if (!box) return;
             const o1 = document.getElementById('opt_banner'), o2 = document.getElementById('opt_notify'), o3 = document.getElementById('opt_sound');
             if (o1) o1.checked = appSettings.remBanner !== false;
             if (o2) o2.checked = !!appSettings.remNotify && (!('Notification' in window) || Notification.permission === 'granted');
             if (o3) o3.checked = !!appSettings.remSound;
             const form = document.getElementById('tk_rep');
             if (form && !form.firstChild) { form.innerHTML = repEditorHtml('tk', { type: 'days', n: 30 }); repUi('tk'); }
-            const list = tasks.slice().sort((a, b) => taskDueTs(a) - taskDueTs(b));
-            const open = new Set([...document.querySelectorAll('#taskList details[open]')].map(d => d.id));
-            const ov = list.length ? `<div class="tk-ov"><div class="hd">Übersicht · ${list.length} ${list.length === 1 ? 'Erinnerung' : 'Erinnerungen'}</div>` + list.map(t => {
-                const st = taskStatus(t), d = new Date(t.due);
-                return `<div class="row"><div class="dt ${st.cls}"><b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${t.time ? t.time + ' Uhr' : 'ganztägig'}</div><div><div class="nm">${escapeHtml(t.text)}</div><div class="iv">${repLabel(taskRep(t))} · ${st.txt}</div></div></div>`;
-            }).join('') + '</div>' : '';
-            box.innerHTML = ov + list.map(t => {
-                const st = taskStatus(t), rep = taskRep(t), iso = new Date(t.due); const isoS = `${iso.getFullYear()}-${pad2(iso.getMonth() + 1)}-${pad2(iso.getDate())}`;
-                return `<div class="task-card">
-                    <div class="tk-top"><div class="tk-title">${escapeHtml(t.text)}</div><span class="tk-chip ${st.cls}">${st.txt}</span></div>
-                    <div class="tk-sub">${fmtDayLong(t.due)}${t.time ? ' · ' + t.time + ' Uhr' : ''}</div>
-                    <div class="tk-act">
+            const nt = document.getElementById('newTaskPanel'); if (nt && !nt.dataset.init) { nt.dataset.init = 1; if (!tasks.length) nt.open = true; }
+            const open = new Set([...document.querySelectorAll('#ovList details[open]')].map(d => d.id));
+            const rows = [];
+            Object.keys(reminders).forEach(k => { if (!thresholds[k]) return; const m = measDue(k); rows.push({ key: 'm_' + k, ts: m.ts, st: m, kind: 'meas', k }); });
+            Object.keys(followups).forEach(k => { const f = followups[k]; if (!thresholds[k] || !f) return; const over = Date.now() >= f.due; rows.push({ key: 'f_' + k, ts: f.due, st: { cls: over ? 'over' : '', txt: over ? 'jetzt nachmessen' : 'Nachmessung', d: over ? -1 : 1 }, kind: 'fu', k }); });
+            tasks.forEach(t => rows.push({ key: 't_' + t.id, ts: taskDueTs(t), st: taskStatus(t), kind: 'task', t }));
+            rows.sort((a, b) => a.ts - b.ts);
+            const grp = r => (r.st.d < 0 || (r.st.d === 0 && !r.st.later)) ? 0 : (r.st.d === 0 ? 1 : 2);
+            const GN = ['Jetzt fällig', 'Heute noch', 'Demnächst'];
+            const rowHtml = r => {
+                const st = r.st; let dt, nm, iv, bodyH;
+                if (r.kind === 'task') {
+                    const t = r.t, rp = taskRep(t), d = new Date(t.due), isoS = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+                    dt = `<b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${t.time ? t.time + ' Uhr' : 'ganztägig'}`;
+                    nm = '📝 ' + escapeHtml(t.text); iv = `${repLabel(rp)} · ${st.txt}`;
+                    bodyH = `<div class="tk-act">
                         <button type="button" class="btn-note save" onclick="taskDone(${t.id})">✓ Erledigt</button>
                         <select class="input-styled later" onchange="if(this.value){taskSnooze(${t.id}, +this.value);}this.value=''"><option value="">⏰ Später</option><option value="1">Morgen</option><option value="3">In 3 Tagen</option><option value="7">In 1 Woche</option></select>
                         <button type="button" class="btn-note ic" title="In den Kalender" onclick="exportTaskIcs(${t.id})">📅</button>
                         <button type="button" class="btn-note ic" title="${t.notify === false ? 'Mitteilung aus' : 'Mitteilung an'}" onclick="taskSet(${t.id},'notify',${t.notify === false})" style="${t.notify === false ? 'opacity:.45;' : ''}">${t.notify === false ? '🔕' : '🔔'}</button>
                         <button type="button" class="btn-note ic" title="Löschen" onclick="taskDel(${t.id})">🗑</button>
                     </div>
-                    <details id="te${t.id}d"${open.has('te' + t.id + 'd') ? ' open' : ''} style="margin-top:8px;"><summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted);">Bearbeiten</summary>
-                        <div class="tk-form" style="margin-top:8px;">
-                            <div><div class="lbl">Text</div><input type="text" class="input-styled" value="${escapeHtml(t.text)}" onchange="taskSet(${t.id},'text',this.value)"></div>
-                            <div><div class="lbl">Wiederholung</div>${repEditorHtml('te' + t.id, rep, `taskRepSave(${t.id})`)}</div>
-                            <div class="two"><div><div class="lbl">Nächster Termin</div><input type="date" class="input-styled" value="${isoS}" onchange="taskSet(${t.id},'due',this.value)"></div>
-                            <div><div class="lbl">Uhrzeit</div><input type="time" class="input-styled" value="${t.time || ''}" onchange="taskSet(${t.id},'time',this.value)"></div></div>
-                        </div>
-                    </details>
-                </div>`;
-            }).join('') || '<div class="rec-meta" style="margin-top:10px;">Noch keine eigenen Erinnerungen.</div>';
-            list.forEach(t => repUi('te' + t.id));
+                    <div class="tk-form" style="margin-top:12px;">
+                        <div><div class="lbl">Text</div><input type="text" class="input-styled" value="${escapeHtml(t.text)}" onchange="taskSet(${t.id},'text',this.value)"></div>
+                        <div><div class="lbl">Wiederholung</div>${repEditorHtml('te' + t.id, rp, `taskRepSave(${t.id})`)}</div>
+                        <div class="two"><div><div class="lbl">Nächster Termin</div><input type="date" class="input-styled" value="${isoS}" onchange="taskSet(${t.id},'due',this.value)"></div>
+                        <div><div class="lbl">Uhrzeit</div><input type="time" class="input-styled" value="${t.time || ''}" onchange="taskSet(${t.id},'time',this.value)"></div></div>
+                    </div>`;
+                } else if (r.kind === 'meas') {
+                    const k = r.k, d = new Date(r.ts), tm = remTimes[k] || '';
+                    dt = st.never ? '<b>offen</b>kein Wert' : `<b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${tm ? tm + ' Uhr' : 'ganztägig'}`;
+                    nm = `🧪 <span style="color:${paramColors[k]}">${thresholds[k].label}</span> messen`; iv = `alle ${reminders[k]} Tage · ${st.txt}`;
+                    bodyH = `<div class="tk-act"><button type="button" class="btn-note save" onclick="remMeasure('${k}')">🧪 Jetzt messen</button><button type="button" class="btn-note" style="height:40px;" onclick="saveReminder('${k}','')">Entfernen</button></div>
+                    <div class="rem-row" style="margin-top:8px;"><span>alle</span><input type="number" min="1" max="365" inputmode="numeric" class="input-styled" value="${reminders[k]}" onchange="saveReminder('${k}', this.value)"><span>Tage um</span><input type="time" class="input-styled" value="${tm}" onchange="saveRemTime('${k}', this.value)"></div>`;
+                } else {
+                    const d = new Date(r.ts);
+                    dt = `<b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${pad2(d.getHours())}:${pad2(d.getMinutes())} Uhr`;
+                    nm = `🧪 <span style="color:${paramColors[r.k]}">${thresholds[r.k].label}</span> nachmessen`; iv = `nach deiner Maßnahme · ${st.txt}`;
+                    bodyH = `<div class="tk-act"><button type="button" class="btn-note save" onclick="remMeasure('${r.k}')">🧪 Jetzt messen</button></div>`;
+                }
+                return `<details class="ov-row" id="ov_${r.key}"${open.has('ov_' + r.key) ? ' open' : ''}><summary><div class="dt ${st.cls}">${dt}</div><div><div class="nm">${nm}</div><div class="iv">${iv}</div></div><span class="chev">›</span></summary><div class="ov-body task-card">${bodyH}</div></details>`;
+            };
+            let html = '';
+            [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<div class="ov-grp">${GN[g]} · ${rs.length}</div>` + rs.map(rowHtml).join(''); });
+            box.innerHTML = html || '<div class="rec-meta" style="margin-top:10px;">Noch nichts geplant. Lege unten eine Erinnerung an oder richte Messungen ein.</div>';
+            tasks.forEach(t => repUi('te' + t.id));
         }
         function remBeep() {
             try {
@@ -3032,7 +3065,7 @@
         }
         function doseShared(series) { return doseMode(series) !== 'pct'; }
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
-            const L = doseLayoutMode(series) === 'lanes' ? 78 : 60, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+            const L = doseLayoutMode(series) === 'lanes' ? 78 : 74, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
             const unit0 = series.length ? doseUnit(series[0].k) : 'ml';
             const mode = doseLayoutMode(series), single = true;
             const ymax = mode === 'lin' ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
@@ -3081,7 +3114,7 @@
                 ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke();
                 const val = mode === 'log' ? ticks[i] : ymax * i / 4;
                 ctx.textAlign = 'right';
-                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + (i === nT ? ' ' + unit0 : '') : Math.round(val) + ' %', L - 6, yy);
+                ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + ' ' + unit0 : Math.round(val) + ' %', L - 6, yy);
             }
             }
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -3632,7 +3665,7 @@
                 y -= 4;
                 drawImage(addImage(jb, tmp.width, tmp.height), M, y - ch, cw, ch);
                 y -= ch + 6;
-                text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Gemeinsame Skala nach Sollbereich (0 % = Soll min, 100 % = Soll max, Ø = Durchschnitt des Sollbereichs). Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
+                text(M, y - 8, myChart.single ? 'Grün = Sollbereich, gelb = Toleranz, rot = kritisch. Gelbe Raute = Notiz.' : 'Vergleichsansicht: Gruene Zone = Sollbereich des jeweiligen Parameters, darueber zu hoch, darunter zu niedrig. Gelbe Raute = Notiz.', 8, 'F3', '0.45 0.5 0.55 rg');
                 y -= 14;
             }
 
@@ -4190,7 +4223,9 @@
                 if (v === 0) return 'Soll min';
                 if (v === 100) return 'Soll max';
                 if (v === 50) return 'Ø';
-                return v + ' %';
+                if (v === yTicks[yTicks.length - 1] && v > 100) return 'zu hoch';
+                if (v === yTicks[0] && v < 0) return 'zu niedrig';
+                return '';
             };
             ctx.font = `10px ${font}`;
             let maxW = 0;
@@ -4459,7 +4494,7 @@
                 myChart.yStep = 50;
                 myChart.yTitle = '';
                 myChart.bands = [{ from: 0, to: 100, color: 'rgba(0, 255, 135, 0.16)' }];
-                hint = 'Gemeinsame Skala nach Sollbereich: Die grüne Zone ist für jeden Parameter sein Sollbereich (0 % = Soll min, 100 % = Soll max, Ø = Durchschnitt des Sollbereichs). Tippe auf einen Punkt für den echten Messwert.';
+                hint = 'Vergleichsansicht: Die grüne Zone ist bei jedem Parameter sein Sollbereich. Liegt eine Linie in der grünen Zone, passt der Wert; darüber ist er zu hoch, darunter zu niedrig. Tippe auf einen Punkt für den echten Messwert. Für echte Werte auf der Achse wähle nur einen Parameter.';
             }
 
             myChart.notes = records
