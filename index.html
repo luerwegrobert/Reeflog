@@ -481,6 +481,24 @@
             .table-responsive table { font-size: 0.8rem; }
         }
 
+        .task-row { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.07); }
+        .task-row .tk-meta { font-size: 0.78rem; color: var(--text-muted); margin: 4px 0 6px; }
+        .task-row .tk-due { font-weight: 700; }
+        .task-row .tk-due.over { color: #ff7b7b; } .task-row .tk-due.today { color: #ffcc66; }
+        .task-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+        .rem-pop { position: fixed; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); top: calc(env(safe-area-inset-top, 0px) + 6px); z-index: 99999; padding: 6px 8px 6px 12px; border-radius: 16px; background: rgba(8, 20, 34, 0.92); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 2px 12px rgba(0,0,0,0.35); font-size: 0.78rem; color: var(--text-muted); }
+        .rem-pop .rp-h { display: flex; align-items: center; gap: 6px; }
+        .rem-pop .rp-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .rem-pop button { background: none; border: none; color: var(--accent, #4fe3c1); font-size: 0.8rem; padding: 4px 6px; cursor: pointer; }
+        .rem-pop .rp-list { margin-top: 4px; max-height: 40vh; overflow: auto; border-top: 1px solid rgba(255,255,255,0.08); }
+        .rem-pop .rp-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; color: #e8eef5; }
+        .rep-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+        .rep-box .wd { display: flex; gap: 4px; flex-wrap: wrap; }
+        .rep-box .wd label { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; font-size: 0.78rem; }
+        .rep-box .wd input { width: 14px; height: 14px; }
+        .rem-pop .rp-t { flex: 1; min-width: 0; }
+        .rem-opt { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 0.88rem; }
+        .rem-opt input { width: 20px; height: 20px; flex: none; }
         .rem-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
         .rem-row label { flex: 1; font-weight: 600; font-size: 0.9rem; }
         .rem-row input { width: 84px; }
@@ -762,6 +780,7 @@
         <button class="tab-btn" data-tab="targets" onclick="switchTab('targets')">🎯 Sollwerte</button>
     </div>
 
+    <div class="rem-pop" id="remPop" style="display:none;"></div>
     <div class="tm-toast" id="tmToast" onclick="tmDismissAll()">⏰ Countdown abgelaufen – tippen zum Beenden</div>
 
     <div class="container">
@@ -842,6 +861,24 @@
             <div class="glass-panel" id="dueBanner" style="display: none;">
                 <div class="panel-title">⏰ Messung fällig</div>
                 <div id="dueList"></div>
+            </div>
+
+            <div class="glass-panel" id="taskPanel">
+                <div class="panel-title">📝 Eigene Erinnerungen</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">Freier Text und frei wählbare Wiederholung – z. B. „Aktivkohle wechseln“ alle 30 Tage, jeden Sonntag oder jeden ersten Samstag im Monat.</div>
+                <input type="text" id="tk_text" class="input-styled" placeholder="Was soll erledigt werden? z. B. Aktivkohle wechseln">
+                <div id="tk_rep"></div>
+                <div class="prod-line" style="margin-top:6px;"><span>Erstmals am</span><input type="date" id="tk_date" class="input-styled" style="min-width:150px;"></div>
+                <div class="rec-meta">Datum leer = nächster passender Termin ab heute.</div>
+                <button type="button" class="btn-note save" style="margin-top:6px;" onclick="taskAdd()">➕ Erinnerung hinzufügen</button>
+                <div id="taskList"></div>
+                <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;">
+                    <label class="rem-opt"><input type="checkbox" id="opt_banner" onchange="setRemOpt('remBanner', this.checked)"><span>Hinweis oben einblenden, solange etwas fällig ist (bleibt, bis du ihn wegklickst oder alles erledigt ist)</span></label>
+                    <label class="rem-opt"><input type="checkbox" id="opt_sound" onchange="setRemOpt('remSound', this.checked)"><span>Ton beim Hinweis in der App (kurzer Signalton; auf dem iPhone nur, wenn die App gerade bedient wird)</span></label>
+                    <label class="rem-opt"><input type="checkbox" id="opt_notify" onchange="setRemOpt('remNotify', this.checked)"><span>Systemmitteilung beim Öffnen (Push, siehe Hinweis)</span></label>
+                    <div class="rec-meta">Hinweis: Die Mitteilung erscheint, sobald du die App öffnest oder wieder in den Vordergrund holst. Eine Mitteilung bei geschlossener App und gesperrtem Handy geht nur über den Kalender (📅) oder einen eigenen Push-Server. Auf dem iPhone brauchst du dafür die über „Zum Home-Bildschirm“ installierte App (iOS 16.4 oder neuer).</div>
+                    <button type="button" class="btn-note" style="margin-top:6px;" onclick="exportTaskIcs()">📅 Alle eigenen Erinnerungen in den Kalender</button>
+                </div>
             </div>
 
             <details class="glass-panel" id="reminderSettings" open>
@@ -1010,6 +1047,7 @@
             renderBackupInfo();
             if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
             if (!Object.keys(reminders).length) document.getElementById('reminderSettings').open = true;
+            setTimeout(remPopCheck, 800);
         });
 
         function pad2(n) { return String(n).padStart(2, '0'); }
@@ -1716,27 +1754,272 @@
                 if (!thresholds[k]) return;
                 const last = lastMeasured(k);
                 const label = `<b style="color:${paramColors[k]}">${thresholds[k].label}</b>`;
-                if (!last) { items.push({ d: -9999, html: `${label} – noch keine Messung eingetragen` }); return; }
+                if (!last) { items.push({ d: -9999, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – noch keine Messung eingetragen` }); return; }
                 const dueDay = startOfDay(last) + reminders[k] * DAY_MS;
                 const d = Math.round((dueDay - today) / DAY_MS);
-                if (d < -1) items.push({ d, html: `${label} – seit ${-d} Tagen überfällig` });
-                else if (d === -1) items.push({ d, html: `${label} – seit gestern überfällig` });
-                else if (d === 0) items.push({ d, html: `${label} – heute fällig` });
-                else if (d === 1) items.push({ d, html: `${label} – morgen fällig` });
+                if (d < -1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – seit ${-d} Tagen überfällig` });
+                else if (d === -1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – seit gestern überfällig` });
+                else if (d === 0) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – heute fällig` });
+                else if (d === 1) items.push({ d, kind: 'meas', k, bt: thresholds[k].label + ' messen', html: `${label} – morgen fällig` });
+            });
+            tasks.forEach(t => {
+                const st = taskStatus(t), label = `<b>${escapeHtml(t.text)}</b>`;
+                if (st.d <= 1) items.push({ d: st.d - 0.5, kind: 'task', id: t.id, bt: t.text, notify: t.notify !== false, html: `${label} – ${st.txt} <button type="button" class="btn-note save" style="margin-left:6px;" onclick="taskDone(${t.id})">✓ Erledigt</button>` });
             });
             let fuChanged = false;
             Object.keys(followups).forEach(k => {
                 const f = followups[k];
                 if (!thresholds[k] || !f || lastMeasured(k) > f.action) { delete followups[k]; fuChanged = true; return; }
-                if (Date.now() >= f.due) items.push({ d: -10000, html: `<b style="color:${paramColors[k]}">${thresholds[k].label}</b> – nachmessen (nach deiner Maßnahme)` });
+                if (Date.now() >= f.due) items.push({ d: -10000, kind: 'meas', k, bt: thresholds[k].label + ' nachmessen', html: `<b style="color:${paramColors[k]}">${thresholds[k].label}</b> – nachmessen (nach deiner Maßnahme)` });
             });
             if (fuChanged) saveFollowups();
             items.sort((a, b) => a.d - b.d);
+            items.forEach(i => { i.txt = i.html.replace(/<button[\s\S]*?<\/button>/g, '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim(); });
+            dueItems = items;
+            renderTasks();
+            remPopRender();
             const active = Object.keys(reminders).filter(k => thresholds[k]).length;
             document.getElementById('remSummary').textContent = active ? `⏰ Messerinnerungen (${active} aktiv) – einstellen` : '⏰ Messerinnerungen einstellen';
             panel.style.display = items.length ? 'block' : 'none';
             setBadge('badgeRem', items.length);
             document.getElementById('dueList').innerHTML = items.map(i => `<div class="due-item">${i.html}</div>`).join('');
+        }
+
+        // ===== Eigene Erinnerungen (frei beschriftbar, frei wiederkehrend) =====
+        let tasks = (() => { try { const t = JSON.parse(localStorage.getItem('pepeaqua_tasks')); return Array.isArray(t) ? t : []; } catch (e) { return []; } })();
+        let dueItems = [];
+        const WD_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'], WD_LONG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'], WD_ICS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+        const NTH = { 1: 'ersten', 2: 'zweiten', 3: 'dritten', 4: 'vierten', '-1': 'letzten' };
+        function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+        function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+        function addDaysTs(ts, n) { const d = new Date(ts); d.setDate(d.getDate() + n); d.setHours(0, 0, 0, 0); return d.getTime(); }
+        function fmtDay(ts) { const d = new Date(ts); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`; }
+        function saveTasks() { try { localStorage.setItem('pepeaqua_tasks', JSON.stringify(tasks)); } catch (e) {} renderReminders(); }
+        function taskRep(t) { return t.rep || (t.days > 0 ? { type: 'days', n: t.days } : { type: 'once' }); }
+        function dim(y, m) { return new Date(y, m + 1, 0).getDate(); }
+        function monthOcc(rep, y, m) {
+            if (rep.type === 'monthday') { const d = rep.day === 0 ? dim(y, m) : Math.min(rep.day || 1, dim(y, m)); return new Date(y, m, d).getTime(); }
+            const wd = rep.wd || 0;
+            if (rep.nth === -1) { const last = new Date(y, m, dim(y, m)); const back = (last.getDay() - wd + 7) % 7; return new Date(y, m, dim(y, m) - back).getTime(); }
+            const first = new Date(y, m, 1), add = (wd - first.getDay() + 7) % 7; return new Date(y, m, 1 + add + ((rep.nth || 1) - 1) * 7).getTime();
+        }
+        // nächster Termin strikt nach "after" (Tagesbeginn)
+        function repNext(rep, after) {
+            const a = startOfDay(after), n = Math.max(1, rep.n || 1);
+            if (rep.type === 'days') return addDaysTs(a, n);
+            if (rep.type === 'weekly') {
+                const wds = (rep.wd && rep.wd.length ? rep.wd : [new Date(a).getDay()]);
+                const dow = (new Date(a).getDay() + 6) % 7;
+                for (let i = 1; i <= 7 - dow - 1 + 0; i++) { const ts = addDaysTs(a, i); if (wds.includes(new Date(ts).getDay())) return ts; }
+                const monday = addDaysTs(a, -dow);
+                for (let i = 0; i < 7; i++) { const ts = addDaysTs(monday, n * 7 + i); if (wds.includes(new Date(ts).getDay())) return ts; }
+                return addDaysTs(a, 7 * n);
+            }
+            if (rep.type === 'monthday' || rep.type === 'monthnth') {
+                const d0 = new Date(a); let y = d0.getFullYear(), m = d0.getMonth();
+                for (let k = 0; k < 40; k++) { const ts = monthOcc(rep, y, m); if (ts > a) return ts; m += n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; if (k === 0) { /* erster Monat geprüft */ } }
+            }
+            return addDaysTs(a, 1);
+        }
+        function repLabel(rep) {
+            const n = Math.max(1, rep.n || 1);
+            if (rep.type === 'days') return n === 1 ? 'täglich' : `alle ${n} Tage`;
+            if (rep.type === 'weekly') { const w = (rep.wd || []).slice().sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)).map(x => WD_SHORT[x]).join(', ') || '–'; return (n === 1 ? 'jede Woche' : `alle ${n} Wochen`) + ' ' + w; }
+            if (rep.type === 'monthday') return (n === 1 ? 'jeden Monat' : `alle ${n} Monate`) + (rep.day === 0 ? ' am letzten Tag' : ` am ${rep.day || 1}.`);
+            if (rep.type === 'monthnth') return (n === 1 ? 'jeden Monat' : `alle ${n} Monate`) + ` am ${NTH[rep.nth || 1]} ${WD_LONG[rep.wd || 0]}`;
+            return 'einmalig';
+        }
+        function repEditorHtml(p, rep, onch) {
+            const r = rep || { type: 'days', n: 30 }, t = r.type;
+            const oc = onch ? `;${onch}` : '';
+            const opt = (v, l) => `<option value="${v}"${t === v ? ' selected' : ''}>${l}</option>`;
+            const n = r.n || 1;
+            const wdBox = WD_SHORT.map((l, d) => d).sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)).map(d => `<label><input type="checkbox" class="${p}_wd" value="${d}"${(r.wd || []).includes(d) ? ' checked' : ''} onchange="${onch || ''}">${WD_SHORT[d]}</label>`).join('');
+            const wdSel = `<select id="${p}_wd1" class="input-styled" onchange="${onch || ''}">${[1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}"${(r.wd || 0) === d && t === 'monthnth' ? ' selected' : ''}>${WD_LONG[d]}</option>`).join('')}</select>`;
+            return `<div class="rep-box">
+                <select id="${p}_type" class="input-styled" onchange="repUi('${p}',1)${oc}">${opt('days', 'Alle X Tage')}${opt('weekly', 'Wöchentlich an Wochentag(en)')}${opt('monthday', 'Monatlich an einem Datum')}${opt('monthnth', 'Monatlich an einem Wochentag')}${opt('once', 'Einmalig')}</select>
+                <span class="rp_${p} rp_days rp_weekly rp_monthday rp_monthnth"><span class="rp_l">alle</span> <input type="number" min="1" max="365" inputmode="numeric" id="${p}_n" class="input-styled" style="width:64px;" value="${n}" onchange="${onch || ''}"> <span class="rp_u" id="${p}_u">Tage</span></span>
+                <span class="rp_${p} rp_weekly wd">${wdBox}</span>
+                <span class="rp_${p} rp_monthday"><span>am</span> <input type="number" min="0" max="31" inputmode="numeric" id="${p}_day" class="input-styled" style="width:64px;" value="${r.day === 0 ? 0 : (r.day || 1)}" onchange="${onch || ''}"> <span>. (0 = letzter Tag)</span></span>
+                <span class="rp_${p} rp_monthnth"><select id="${p}_nth" class="input-styled" onchange="${onch || ''}">${[1, 2, 3, 4, -1].map(v => `<option value="${v}"${(r.nth || 1) === v ? ' selected' : ''}>${v === -1 ? 'letzter' : v + '.'}</option>`).join('')}</select> ${wdSel}</span>
+            </div>`;
+        }
+        function repUi(p, reset) {
+            const t = document.getElementById(p + '_type').value;
+            if (reset) { const ne = document.getElementById(p + '_n'); if (ne) ne.value = t === 'days' ? 30 : 1; }
+            document.querySelectorAll('.rp_' + p).forEach(el => { el.style.display = el.classList.contains('rp_' + t) ? '' : 'none'; });
+            const u = document.getElementById(p + '_u'); if (u) u.textContent = { days: 'Tage', weekly: 'Wochen', monthday: 'Monate', monthnth: 'Monate' }[t] || '';
+        }
+        function readRep(p) {
+            const g = id => document.getElementById(p + '_' + id), t = g('type').value;
+            const n = Math.min(Math.max(parseInt(g('n').value, 10) || 1, 1), 365);
+            if (t === 'once') return { type: 'once' };
+            if (t === 'days') return { type: 'days', n };
+            if (t === 'weekly') { const wd = [...document.querySelectorAll('.' + p + '_wd:checked')].map(x => +x.value); return { type: 'weekly', n, wd: wd.length ? wd : [new Date().getDay()] }; }
+            if (t === 'monthday') { const d = parseInt(g('day').value, 10); return { type: 'monthday', n, day: isFinite(d) ? Math.min(Math.max(d, 0), 31) : 1 }; }
+            return { type: 'monthnth', n, nth: parseInt(g('nth').value, 10) || 1, wd: parseInt(g('wd1').value, 10) };
+        }
+        function taskFirstDue(rep, dateStr) {
+            let from = startOfDay(Date.now());
+            if (dateStr) { const p = dateStr.split('-').map(Number); from = new Date(p[0], p[1] - 1, p[2]).getTime(); }
+            if (rep.type === 'once' || rep.type === 'days') return dateStr ? from : (rep.type === 'days' ? repNext(rep, from) : from);
+            return repNext(rep, addDaysTs(from, -1));
+        }
+        function taskAdd() {
+            const tx = document.getElementById('tk_text').value.trim();
+            if (!tx) { alert('Bitte einen Text eingeben, z. B. „Aktivkohle wechseln“.'); return; }
+            const rep = readRep('tk'), ds = document.getElementById('tk_date').value;
+            tasks.push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), text: tx, rep, due: taskFirstDue(rep, ds), notify: true });
+            document.getElementById('tk_text').value = ''; document.getElementById('tk_date').value = '';
+            saveTasks();
+        }
+        function taskById(id) { return tasks.find(t => t.id === id); }
+        function taskDone(id) {
+            const t = taskById(id); if (!t) return;
+            const rep = taskRep(t);
+            if (rep.type === 'once') tasks = tasks.filter(x => x.id !== id); else t.due = repNext(rep, Date.now());
+            saveTasks();
+        }
+        function taskSnooze(id, n) { const t = taskById(id); if (!t) return; t.due = addDaysTs(Date.now(), n); saveTasks(); }
+        function taskDel(id) { if (!confirm('Diese Erinnerung löschen?')) return; tasks = tasks.filter(x => x.id !== id); saveTasks(); }
+        function taskSet(id, f, v) {
+            const t = taskById(id); if (!t) return;
+            if (f === 'text') { v = String(v).trim(); if (!v) { renderTasks(); return; } t.text = v; }
+            else if (f === 'rep') { t.rep = v; delete t.days; t.due = taskFirstDue(v, ''); }
+            else if (f === 'notify') t.notify = !!v;
+            else if (f === 'due') { const p = String(v).split('-').map(Number); if (p.length === 3 && p[0]) t.due = new Date(p[0], p[1] - 1, p[2]).getTime(); }
+            saveTasks();
+        }
+        function taskRepSave(id) { taskSet(id, 'rep', readRep('te' + id)); }
+        function taskStatus(t) {
+            const d = Math.round((t.due - startOfDay(Date.now())) / DAY_MS);
+            if (d < -1) return { d, cls: 'over', txt: `seit ${-d} Tagen überfällig` };
+            if (d === -1) return { d, cls: 'over', txt: 'seit gestern überfällig' };
+            if (d === 0) return { d, cls: 'today', txt: 'heute fällig' };
+            if (d === 1) return { d, cls: '', txt: 'morgen fällig' };
+            return { d, cls: '', txt: `fällig in ${d} Tagen` };
+        }
+        function renderTasks() {
+            const box = document.getElementById('taskList'); if (!box) return;
+            const o1 = document.getElementById('opt_banner'), o2 = document.getElementById('opt_notify'), o3 = document.getElementById('opt_sound');
+            if (o1) o1.checked = appSettings.remBanner !== false;
+            if (o2) o2.checked = !!appSettings.remNotify && (!('Notification' in window) || Notification.permission === 'granted');
+            if (o3) o3.checked = !!appSettings.remSound;
+            const form = document.getElementById('tk_rep');
+            if (form && !form.firstChild) { form.innerHTML = repEditorHtml('tk', { type: 'days', n: 30 }); repUi('tk'); }
+            const list = tasks.slice().sort((a, b) => a.due - b.due);
+            const open = new Set([...document.querySelectorAll('#taskList details[open]')].map(d => d.id));
+            box.innerHTML = list.map(t => {
+                const st = taskStatus(t), rep = taskRep(t), iso = new Date(t.due); const isoS = `${iso.getFullYear()}-${pad2(iso.getMonth() + 1)}-${pad2(iso.getDate())}`;
+                return `<div class="task-row">
+                    <input type="text" class="input-styled" value="${escapeHtml(t.text)}" onchange="taskSet(${t.id},'text',this.value)">
+                    <div class="tk-meta"><span class="tk-due ${st.cls}">${st.txt}</span> · ${fmtDay(t.due)} · ${repLabel(rep)}</div>
+                    <div class="task-btns">
+                        <button type="button" class="btn-note save" onclick="taskDone(${t.id})">✓ Erledigt</button>
+                        <button type="button" class="btn-note" onclick="taskSnooze(${t.id},1)">+1 Tag</button>
+                        <button type="button" class="btn-note" onclick="taskSnooze(${t.id},7)">+7 Tage</button>
+                        <button type="button" class="btn-note" onclick="exportTaskIcs(${t.id})">📅 Kalender</button>
+                        <button type="button" class="btn-note" onclick="taskSet(${t.id},'notify',${t.notify === false})">${t.notify === false ? '🔕 Mitteilung aus' : '🔔 Mitteilung an'}</button>
+                        <button type="button" class="btn-note" onclick="taskDel(${t.id})">🗑</button>
+                    </div>
+                    <details id="te${t.id}d"${open.has('te' + t.id + 'd') ? ' open' : ''} style="margin-top:6px;"><summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted);">Wiederholung / Datum ändern</summary>
+                        ${repEditorHtml('te' + t.id, rep, `taskRepSave(${t.id})`)}
+                        <div class="prod-line" style="margin-top:6px;"><span>Nächster Termin</span><input type="date" class="input-styled" style="min-width:150px;" value="${isoS}" onchange="taskSet(${t.id},'due',this.value)"></div>
+                    </details>
+                </div>`;
+            }).join('') || '<div class="rec-meta" style="margin-top:8px;">Noch keine eigenen Erinnerungen.</div>';
+            list.forEach(t => repUi('te' + t.id));
+        }
+        function remBeep() {
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+                const ctx = new AC(); if (ctx.resume) ctx.resume();
+                [[880, 0], [660, 0.16]].forEach(([f, t0]) => {
+                    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+                    const t = ctx.currentTime + t0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+                    o.start(t); o.stop(t + 0.3);
+                });
+                setTimeout(() => { try { ctx.close(); } catch (e) {} }, 800);
+            } catch (e) {}
+        }
+        function setRemOpt(k, v) {
+            appSettings[k] = !!v; saveSettings();
+            if (k === 'remSound' && v) remBeep();
+            if (k === 'remNotify' && v) {
+                if (!('Notification' in window)) { appSettings.remNotify = false; saveSettings(); renderTasks(); alert('Dieses Gerät bzw. dieser Browser unterstützt keine Systemmitteilungen. Auf dem iPhone geht das nur mit der über „Zum Home-Bildschirm“ installierten App (iOS 16.4 oder neuer).'); return; }
+                Notification.requestPermission().then(p => {
+                    if (p !== 'granted') { appSettings.remNotify = false; saveSettings(); alert('Mitteilungen wurden nicht erlaubt. Du kannst das in den Einstellungen des Geräts ändern.'); }
+                    renderTasks(); lsSet('pepeaqua_remnotif_day', ''); remPopCheck();
+                });
+            } else renderTasks();
+        }
+        let remPopShown = false, remPopExpanded = false;
+        function remPopItems() { return dueItems.filter(i => i.d <= 0 && i.notify !== false); }
+        function remPopRender() {
+            const el = document.getElementById('remPop'); if (!el) return;
+            const items = remPopItems();
+            if (!remPopShown || !items.length) { el.style.display = 'none'; if (!items.length) remPopShown = false; return; }
+            const exp = items.length === 1 || remPopExpanded;
+            const head = items.length === 1 ? '🔔 ' + escapeHtml(items[0].bt) : `🔔 ${items.length} fällig${exp ? '' : ': ' + escapeHtml(items.map(i => i.bt).join(' · '))}`;
+            el.innerHTML = `<div class="rp-h"><span class="rp-t" onclick="remPopToggle()">${head}</span>${items.length > 1 ? `<button type="button" onclick="remPopToggle()" aria-label="Liste">${exp ? '▴' : '▾'}</button>` : ''}<button type="button" onclick="remPopOpen()">Öffnen</button><button type="button" onclick="remPopClose()" aria-label="Schließen">✕</button></div>` +
+                (exp ? `<div class="rp-list">${items.map(i => `<div class="rp-item"><span>${escapeHtml(i.bt)}</span>${i.kind === 'task' ? `<button type="button" onclick="taskDone(${i.id})">✓ Erledigt</button>` : `<button type="button" onclick="remMeasure('${i.k}')">Messen →</button>`}</div>`).join('')}</div>` : '');
+            el.style.display = 'block';
+        }
+        function remPopToggle() { remPopExpanded = !remPopExpanded; remPopRender(); }
+        function remMeasure(k) { remPopHide(); switchTab('input'); setTimeout(() => { const e = document.getElementById('val_' + k); if (e) { e.scrollIntoView({ block: 'center' }); e.focus(); } }, 150); }
+        function remPopHide() { remPopShown = false; remPopRender(); }
+        function remPopOpen() { remPopHide(); switchTab('dashboard'); if (curSub !== 'rem') showSub('rem'); }
+        function remPopClose() { lsSet('pepeaqua_rempop_dismiss', isoToday()); remPopHide(); }
+        function remNote(title, body) {
+            const fallback = () => { try { new Notification(title, { body, tag: 'reeflog-due' }); } catch (e) {} };
+            try {
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(reg => { if (reg && reg.showNotification) reg.showNotification(title, { body, tag: 'reeflog-due' }); else fallback(); }).catch(fallback);
+                else fallback();
+            } catch (e) { fallback(); }
+        }
+        function remPopCheck() {
+            const items = remPopItems();
+            if (!items.length) return;
+            const today = isoToday(), title = items.length === 1 ? '1 Erinnerung fällig' : `${items.length} Erinnerungen fällig`;
+            const txt = items.map(i => i.bt).join(' · ');
+            if (appSettings.remBanner !== false && lsGet('pepeaqua_rempop_dismiss') !== today) {
+                remPopShown = true; remPopRender();
+                if (appSettings.remSound && lsGet('pepeaqua_remsound_day') !== today) { lsSet('pepeaqua_remsound_day', today); remBeep(); }
+            }
+            if (appSettings.remNotify && 'Notification' in window && Notification.permission === 'granted' && lsGet('pepeaqua_remnotif_day') !== today) {
+                lsSet('pepeaqua_remnotif_day', today);
+                remNote(title, txt);
+            }
+        }
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderReminders(); remPopCheck(); } });
+        function exportTaskIcs(id) {
+            const list = id ? tasks.filter(t => t.id === id) : tasks;
+            if (!list.length) { alert('Bitte zuerst eine eigene Erinnerung anlegen.'); return; }
+            const f = d => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
+            const esc = t => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+            const rrule = rep => {
+                const n = Math.max(1, rep.n || 1);
+                if (rep.type === 'days') return `RRULE:FREQ=DAILY;INTERVAL=${n}\r\n`;
+                if (rep.type === 'weekly') return `RRULE:FREQ=WEEKLY;INTERVAL=${n};BYDAY=${(rep.wd || []).map(d => WD_ICS[d]).join(',')}\r\n`;
+                if (rep.type === 'monthday') return `RRULE:FREQ=MONTHLY;INTERVAL=${n};BYMONTHDAY=${rep.day === 0 ? -1 : (rep.day || 1)}\r\n`;
+                if (rep.type === 'monthnth') return `RRULE:FREQ=MONTHLY;INTERVAL=${n};BYDAY=${rep.nth === -1 ? '-1' : (rep.nth || 1)}${WD_ICS[rep.wd || 0]}\r\n`;
+                return '';
+            };
+            const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
+            let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Reeflog//DE\r\nCALSCALE:GREGORIAN\r\n';
+            list.forEach(t => {
+                const rep = taskRep(t);
+                let start = new Date(Math.max(t.due, startOfDay(Date.now()))); start.setHours(10, 0, 0, 0);
+                if (start.getTime() < Date.now()) { start = new Date(rep.type === 'once' || rep.type === 'days' ? addDaysTs(Date.now(), 1) : repNext(rep, Date.now())); start.setHours(10, 0, 0, 0); }
+                const end = new Date(start.getTime() + 30 * 60000);
+                ics += 'BEGIN:VEVENT\r\n' + `UID:reeflog-task-${t.id}@reeflog\r\n` + `DTSTAMP:${stamp}\r\n` + `DTSTART:${f(start)}\r\n` + `DTEND:${f(end)}\r\n` + rrule(rep) +
+                    `SUMMARY:${esc(t.text)}\r\n` + 'DESCRIPTION:Reeflog – Erinnerung\r\n' +
+                    'BEGIN:VALARM\r\nACTION:DISPLAY\r\n' + `DESCRIPTION:${esc(t.text)}\r\n` + 'TRIGGER:PT0S\r\nEND:VALARM\r\n' + 'END:VEVENT\r\n';
+            });
+            ics += 'END:VCALENDAR\r\n';
+            const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+            const a = document.createElement('a'); a.href = url; a.download = id ? 'reeflog-erinnerung.ics' : 'reeflog-eigene-erinnerungen.ics';
+            document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
         }
 
         // Kalenderdatei mit wiederkehrenden Terminen und Erinnerung
@@ -3425,7 +3708,7 @@
         }
 
         // ===== Datensicherung =====
-        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds', 'pepeaqua_methods', 'pepeaqua_dosing'];
+        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_tasks', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds', 'pepeaqua_methods', 'pepeaqua_dosing'];
 
         function buildBackup() {
             const data = {};
