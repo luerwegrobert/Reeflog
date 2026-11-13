@@ -2755,6 +2755,16 @@
                 const hx = X(hover), d0 = new Date(hover);
                 ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
                 ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
+                // Markierung auf jeder Linie an der angetippten Stelle (sichtbares Feedback für Tagesdosis & Einmal-Gaben)
+                series.forEach(sr => {
+                    const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                    let v = null;
+                    if (sr.bars) { const dd = startOfDay(hover), q = sr.pts.find(z => startOfDay(z.ts) === dd); if (q) v = q.v; }
+                    else { const e = doseValueAt(sr.k, hover); if (e && e.v > 0) v = e.v; }
+                    if (v === null) return;
+                    ctx.fillStyle = paramColors[sr.k]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(hx, yv(v), 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                });
                 const rows = [];
                 series.forEach(sr => {
                     if (sr.bars) {
