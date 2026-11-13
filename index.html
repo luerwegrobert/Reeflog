@@ -2733,7 +2733,7 @@
                     sr.pts.forEach(q => {
                         const px = X(q.ts), py = yv(q.v);
                         ctx.fillStyle = col; ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 2;
-                        ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                        ctx.beginPath(); ctx.arc(px, py, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
                     });
                     return;
                 }
@@ -2747,9 +2747,10 @@
                 ctx.lineTo(X(to), yv(last.v));
                 ctx.stroke();
                 ctx.fillStyle = col;
-                sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 3, 0, Math.PI * 2); ctx.fill(); });
+                sr.pts.forEach(q => { ctx.beginPath(); ctx.arc(X(q.ts), yv(q.v), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(1,3,5,0.9)'; ctx.lineWidth = 1.5; ctx.stroke(); });
             });
-            const layout = { from, to, L, R, W };
+            const layout = { from, to, L, R, W, pts: [] };
+            series.forEach(sr => sr.pts.forEach(q => layout.pts.push({ x: X(q.ts), ts: q.ts })));
             if (hover !== null && hover !== undefined && hover >= from && hover <= to) {
                 const hx = X(hover), d0 = new Date(hover);
                 ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
@@ -2855,7 +2856,12 @@
             const r = ev.currentTarget.getBoundingClientRect(), x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
             const { from, to, L, R, W } = doseLayout;
             if (x < L - 4 || x > W - R + 4) doseHover = null;
-            else doseHover = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+            else {
+                // an den nächsten Punkt "einrasten", wenn einer in Reichweite ist (großzügiger Fangbereich für den Finger)
+                let best = null, bd = 30;
+                (doseLayout.pts || []).forEach(q => { const d = Math.abs(q.x - x); if (d < bd) { bd = d; best = q; } });
+                doseHover = best ? best.ts : from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
+            }
             renderDoseChart();
         }
 
