@@ -504,6 +504,11 @@
         .task-card .tk-chip.over { background: rgba(255,90,90,0.18); color: #ff9a9a; } .task-card .tk-chip.today { background: rgba(255,204,102,0.18); color: #ffd98a; }
         .task-card .tk-sub { font-size: 0.8rem; color: var(--text-muted); margin: 5px 0 10px; }
         .task-card .tk-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .ms { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.07); } .ms-n { font-weight: 700; } .ms-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .ms-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; align-items: end; } .ms-g > div:first-child { grid-column: 1 / -1; }
+        .ms .lbl { font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
+        .ms-i { display: flex; align-items: center; gap: 5px; } .ms-i span { font-size: 0.8rem; color: var(--text-muted); }
+        .ms .input-styled { width: 100%; box-sizing: border-box; min-width: 0; padding-left: 8px; padding-right: 6px; }
         .ov-grp { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin: 14px 0 6px; }
         .ov-row { border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; margin-bottom: 8px; background: rgba(255,255,255,0.025); }
         .ov-row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 70px 1fr 14px; gap: 10px; align-items: center; padding: 10px 12px; }
@@ -919,7 +924,7 @@
 
             <details class="glass-panel" id="reminderSettings">
                 <summary id="remSummary" style="cursor: pointer; font-weight: 700;">🧪 Messungen einrichten</summary>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Alle wie viele Tage und um welche Uhrzeit soll gemessen werden? Tage leer = keine Erinnerung.</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin: 10px 0;">Schalte eine Messung ein und lege fest, wie oft (alle X Tage, bestimmte Wochentage, Monatstermine), ab welchem Startdatum und um welche Uhrzeit. Startdatum leer = ab deiner letzten Messung.</div>
                 <div id="reminderRows"></div>
             </details>
 
@@ -1777,10 +1782,28 @@
 
         let remTimes = (() => { try { return JSON.parse(localStorage.getItem('pepeaqua_remtimes')) || {}; } catch (e) { return {}; } })();
         function saveRemTime(k, v) { remTimes[k] = /^\d{2}:\d{2}$/.test(v) ? v : ''; try { localStorage.setItem('pepeaqua_remtimes', JSON.stringify(remTimes)); } catch (e) {} renderReminders(); }
+        let remStarts = (() => { try { return JSON.parse(localStorage.getItem('pepeaqua_remstarts')) || {}; } catch (e) { return {}; } })();
+        function saveRemStart(k, v) { if (/^\d{4}-\d{2}-\d{2}$/.test(v)) remStarts[k] = v; else delete remStarts[k]; try { localStorage.setItem('pepeaqua_remstarts', JSON.stringify(remStarts)); } catch (e) {} renderReminders(); }
+        function startTs(k) { const v = remStarts[k]; if (!v) return 0; const p = v.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); }
+        let remReps = (() => { try { return JSON.parse(localStorage.getItem('pepeaqua_remreps')) || {}; } catch (e) { return {}; } })();
+        function measRep(k) { return remReps[k] || { type: 'days', n: reminders[k] || 7 }; }
+        function saveRemRep(k, p) {
+            const r = readRep(p); remReps[k] = r; reminders[k] = Math.max(1, r.n || 1);
+            try { localStorage.setItem('pepeaqua_remreps', JSON.stringify(remReps)); localStorage.setItem('pepeaqua_reminders', JSON.stringify(reminders)); } catch (e) {}
+            renderReminders();
+        }
+        function setMeasOn(k, on) {
+            if (on) { reminders[k] = reminders[k] || 7; if (!remTimes[k]) { remTimes[k] = '09:00'; try { localStorage.setItem('pepeaqua_remtimes', JSON.stringify(remTimes)); } catch (e) {} } }
+            else { delete reminders[k]; delete remReps[k]; try { localStorage.setItem('pepeaqua_remreps', JSON.stringify(remReps)); } catch (e) {} }
+            try { localStorage.setItem('pepeaqua_reminders', JSON.stringify(reminders)); } catch (e) {}
+            renderReminders(); renderReminderSettings();
+        }
         function measDue(k) {
-            const last = lastMeasured(k), n = reminders[k], tm = remTimes[k] || '', at = tm ? ` um ${tm}` : '';
-            if (!last) return { ts: -1, d: -9999, cls: 'over', txt: 'noch keine Messung', never: true };
-            const day = addDaysTs(startOfDay(last), n), d = Math.round((day - startOfDay(Date.now())) / DAY_MS);
+            const last = lastMeasured(k), mrep = measRep(k), tm = remTimes[k] || '', at = tm ? ` um ${tm}` : '';
+            const st0 = startTs(k);
+            if (!last && !st0 && mrep.type === 'days') return { ts: -1, d: -9999, cls: 'over', txt: 'noch keine Messung', never: true };
+            let day = last ? repNext(mrep, last) : (st0 || taskFirstDue(mrep, '')); if (st0 && (!last || st0 > startOfDay(last))) day = st0;
+            const d = Math.round((day - startOfDay(Date.now())) / DAY_MS);
             let ts = day; if (tm) { const x = new Date(day), p = tm.split(':'); x.setHours(+p[0], +p[1], 0, 0); ts = x.getTime(); }
             if (d < -1) return { ts, d, cls: 'over', txt: `seit ${-d} Tagen überfällig` };
             if (d === -1) return { ts, d, cls: 'over', txt: 'seit gestern überfällig' };
@@ -1793,17 +1816,21 @@
             if (n > 0) { reminders[k] = Math.min(n, 365); if (!remTimes[k]) { remTimes[k] = '09:00'; try { localStorage.setItem('pepeaqua_remtimes', JSON.stringify(remTimes)); } catch (e) {} } } else delete reminders[k];
             try { localStorage.setItem('pepeaqua_reminders', JSON.stringify(reminders)); } catch (e) {}
             renderReminders();
+            renderReminderSettings();
         }
 
         function renderReminderSettings() {
-            document.getElementById('reminderRows').innerHTML = Object.keys(thresholds).map(k => `
-                <div class="rem-row">
-                    <label style="color:${paramColors[k]}">${thresholds[k].label}</label>
-                    <span>alle</span>
-                    <input type="number" min="0" max="365" inputmode="numeric" class="input-styled" placeholder="–" value="${reminders[k] || ''}" onchange="saveReminder('${k}', this.value)">
-                    <span>Tage</span>
-                    <input type="time" class="input-styled" style="width:104px;" value="${reminders[k] ? (remTimes[k] || '') : ''}" ${reminders[k] ? '' : 'disabled'} onchange="saveRemTime('${k}', this.value)">
-                </div>`).join('');
+            document.getElementById('reminderRows').innerHTML = Object.keys(thresholds).map(k => {
+                const on = !!reminders[k];
+                return `<div class="ms">
+                    <label class="ms-h"><span class="ms-n" style="color:${paramColors[k]}">${thresholds[k].label}</span><span class="sw"><input type="checkbox"${on ? ' checked' : ''} onchange="setMeasOn('${k}', this.checked)"></span></label>
+                    ${on ? `<div class="ms-g">
+                        <div><div class="lbl">Wiederholung</div>${repEditorHtml('ms_' + k, measRep(k), `saveRemRep('${k}','ms_${k}')`)}</div>
+                        <div><div class="lbl">Startdatum</div><input type="date" class="input-styled" value="${remStarts[k] || ''}" onchange="saveRemStart('${k}', this.value)"></div>
+                        <div><div class="lbl">Uhrzeit</div><input type="time" class="input-styled" value="${remTimes[k] || ''}" onchange="saveRemTime('${k}', this.value)"></div>
+                    </div>` : ''}</div>`;
+            }).join('');
+            Object.keys(reminders).forEach(k => { if (thresholds[k] && document.getElementById('ms_' + k + '_type')) repUi('ms_' + k); });
         }
 
         function renderReminders() {
@@ -1993,9 +2020,13 @@
                 } else if (r.kind === 'meas') {
                     const k = r.k, d = new Date(r.ts), tm = remTimes[k] || '';
                     dt = st.never ? '<b>offen</b>kein Wert' : `<b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${tm ? tm + ' Uhr' : 'ganztägig'}`;
-                    nm = `🧪 <span style="color:${paramColors[k]}">${thresholds[k].label}</span> messen`; iv = `alle ${reminders[k]} Tage · ${st.txt}`;
-                    bodyH = `<div class="tk-act"><button type="button" class="btn-note save" onclick="remMeasure('${k}')">🧪 Jetzt messen</button><button type="button" class="btn-note" style="height:40px;" onclick="saveReminder('${k}','')">Entfernen</button></div>
-                    <div class="rem-row" style="margin-top:8px;"><span>alle</span><input type="number" min="1" max="365" inputmode="numeric" class="input-styled" value="${reminders[k]}" onchange="saveReminder('${k}', this.value)"><span>Tage um</span><input type="time" class="input-styled" value="${tm}" onchange="saveRemTime('${k}', this.value)"></div>`;
+                    nm = `🧪 <span style="color:${paramColors[k]}">${thresholds[k].label}</span> messen`; iv = `${repLabel(measRep(k))} · ${st.txt}`;
+                    bodyH = `<div class="tk-act"><button type="button" class="btn-note save" onclick="remMeasure('${k}')">🧪 Jetzt messen</button><button type="button" class="btn-note" style="height:40px;" onclick="setMeasOn('${k}', false)">Ausschalten</button></div>
+                    <div class="tk-form" style="margin-top:12px;">
+                        <div><div class="lbl">Wiederholung</div>${repEditorHtml('mo_' + k, measRep(k), `saveRemRep('${k}','mo_${k}')`)}</div>
+                        <div class="two"><div><div class="lbl">Nächster Termin</div><input type="date" class="input-styled" value="${remStarts[k] || ''}" onchange="saveRemStart('${k}', this.value)"></div>
+                        <div><div class="lbl">Uhrzeit</div><input type="time" class="input-styled" value="${tm}" onchange="saveRemTime('${k}', this.value)"></div></div>
+                    </div>`;
                 } else {
                     const d = new Date(r.ts);
                     dt = `<b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${pad2(d.getHours())}:${pad2(d.getMinutes())} Uhr`;
@@ -2008,6 +2039,7 @@
             [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<div class="ov-grp">${GN[g]} · ${rs.length}</div>` + rs.map(rowHtml).join(''); });
             box.innerHTML = html || '<div class="rec-meta" style="margin-top:10px;">Noch nichts geplant. Lege unten eine Erinnerung an oder richte Messungen ein.</div>';
             tasks.forEach(t => repUi('te' + t.id));
+            Object.keys(reminders).forEach(k => { if (document.getElementById('mo_' + k + '_type')) repUi('mo_' + k); });
         }
         function remBeep() {
             try {
@@ -2071,6 +2103,14 @@
             }
         }
         document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderReminders(); remPopCheck(); } });
+        function icsRrule(rep) {
+            const n = Math.max(1, rep.n || 1);
+            if (rep.type === 'days') return `RRULE:FREQ=DAILY;INTERVAL=${n}\r\n`;
+            if (rep.type === 'weekly') return `RRULE:FREQ=WEEKLY;INTERVAL=${n};BYDAY=${(rep.wd || []).map(d => WD_ICS[d]).join(',')}\r\n`;
+            if (rep.type === 'monthday') return `RRULE:FREQ=MONTHLY;INTERVAL=${n};BYMONTHDAY=${rep.day === 0 ? -1 : (rep.day || 1)}\r\n`;
+            if (rep.type === 'monthnth') return `RRULE:FREQ=MONTHLY;INTERVAL=${n};BYDAY=${rep.nth === -1 ? '-1' : (rep.nth || 1)}${WD_ICS[rep.wd || 0]}\r\n`;
+            return '';
+        }
         function exportTaskIcs(id) {
             const list = id ? tasks.filter(t => t.id === id) : tasks;
             if (!list.length) { alert('Bitte zuerst eine eigene Erinnerung anlegen.'); return; }
@@ -3788,7 +3828,7 @@
         }
 
         // ===== Datensicherung =====
-        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_tasks', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds', 'pepeaqua_methods', 'pepeaqua_dosing'];
+        const BACKUP_KEYS = ['pepeaqua_records', 'pepeaqua_gallery', 'pepeaqua_reminders', 'pepeaqua_remtimes', 'pepeaqua_remstarts', 'pepeaqua_remreps', 'pepeaqua_tasks', 'pepeaqua_chart_prefs', 'pepeaqua_settings', 'pepeaqua_followups', 'pepeaqua_thresholds', 'pepeaqua_methods', 'pepeaqua_dosing'];
 
         function buildBackup() {
             const data = {};
@@ -3864,11 +3904,9 @@
             const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
             let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Reeflog//DE\r\nCALSCALE:GREGORIAN\r\n';
             keys.forEach(k => {
-                const n = reminders[k];
-                const last = lastMeasured(k);
-                let start = new Date((last || Date.now()) + n * DAY_MS);
-                start.setHours(10, 0, 0, 0);
-                if (start.getTime() < Date.now()) { start = new Date(Date.now() + DAY_MS); start.setHours(10, 0, 0, 0); }
+                const mr = measRep(k), m = measDue(k), tmm = (remTimes[k] || '10:00').split(':');
+                let start = new Date(m.never ? Date.now() + DAY_MS : m.ts); start.setHours(+tmm[0], +tmm[1], 0, 0);
+                if (start.getTime() < Date.now()) { start = new Date(repNext(mr, Date.now())); start.setHours(+tmm[0], +tmm[1], 0, 0); }
                 const end = new Date(start.getTime() + 30 * 60000);
                 const name = thresholds[k].label + ' messen';
                 ics += 'BEGIN:VEVENT\r\n' +
@@ -3876,7 +3914,7 @@
                     `DTSTAMP:${stamp}\r\n` +
                     `DTSTART:${f(start)}\r\n` +
                     `DTEND:${f(end)}\r\n` +
-                    `RRULE:FREQ=DAILY;INTERVAL=${n}\r\n` +
+                    (icsRrule(mr) || '') +
                     `SUMMARY:${name}\r\n` +
                     'DESCRIPTION:Reeflog – Messung fällig\r\n' +
                     'BEGIN:VALARM\r\nACTION:DISPLAY\r\n' +
