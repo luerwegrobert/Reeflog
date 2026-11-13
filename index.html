@@ -2751,7 +2751,10 @@
             });
             const layout = { from, to, L, R, W, pts: [] };
             series.forEach(sr => sr.pts.forEach(q => layout.pts.push({ x: X(q.ts), ts: q.ts })));
+            // Punkte am linken Rand liegen exakt auf "from" des Zeitpunkts der letzten Zeichnung; beim nächsten Zeichnen ist "from" ein paar Millisekunden später -> Auswahl nicht verlieren
+            if (hover !== null && hover !== undefined && hover < from && hover >= from - DAY_MS / 2) hover = from;
             if (hover !== null && hover !== undefined && hover >= from && hover <= to) {
+                layout.shown = true;
                 const hx = X(hover), d0 = new Date(hover);
                 ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
                 ctx.beginPath(); ctx.moveTo(hx, T); ctx.lineTo(hx, T + ph); ctx.stroke(); ctx.setLineDash([]);
