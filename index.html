@@ -1125,7 +1125,9 @@
         }
 
         let curSub = '';
+        function collapseAll() { document.querySelectorAll('details[open]').forEach(d => { d.open = false; }); }
         function showSub(name) {
+            collapseAll();
             curSub = (name && curSub === name) ? '' : (name || '');
             document.querySelectorAll('#dashboard > [data-sub]').forEach(el => {
                 if (el.classList.contains('sub-nav')) return;
@@ -1138,6 +1140,7 @@
         function setBadge(id, n) { const b = document.getElementById(id); if (!b) return; b.textContent = n; b.style.display = n ? 'block' : 'none'; }
 
         function switchTab(tabId) {
+            { const cur = document.querySelector('.tab-content.active'); if (cur && cur.id !== tabId) collapseAll(); }
             if (tabId === 'dashboard' && curSub) showSub('');
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === tabId));
@@ -2048,7 +2051,7 @@
                 return `<details class="ov-row" id="ov_${r.key}"${open.has('ov_' + r.key) ? ' open' : ''}><summary><div class="dt ${st.cls}">${dt}</div><div><div class="nm">${nm}</div><div class="iv">${iv}</div></div><span class="chev">›</span></summary><div class="ov-body task-card">${bodyH}</div></details>`;
             };
             let html = '';
-            [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<details class="ov-g" id="ovg_${g}"${ovClosed.has(g) ? '' : ' open'} ontoggle="ovTog(${g}, this.open)"><summary><span class="chev">›</span><div class="ov-grp">${GN[g]} · ${rs.length}</div></summary>` + rs.map(rowHtml).join('') + '</details>'; });
+            [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<details class="ov-g" id="ovg_${g}"${open.has('ovg_' + g) ? ' open' : ''}><summary><span class="chev">›</span><div class="ov-grp">${GN[g]} · ${rs.length}</div></summary>` + rs.map(rowHtml).join('') + '</details>'; });
             box.innerHTML = html || '<div class="rec-meta" style="margin-top:10px;">Noch nichts geplant. Lege unten eine Erinnerung an oder richte Messungen ein.</div>';
             tasks.forEach(t => repUi('te' + t.id));
             Object.keys(reminders).forEach(k => { if (document.getElementById('mo_' + k + '_type')) repUi('mo_' + k); });
