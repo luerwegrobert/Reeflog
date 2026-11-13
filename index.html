@@ -492,6 +492,35 @@
         .rem-pop button { background: none; border: none; color: var(--accent, #4fe3c1); font-size: 0.8rem; padding: 4px 6px; cursor: pointer; }
         .rem-pop .rp-list { margin-top: 4px; max-height: 40vh; overflow: auto; border-top: 1px solid rgba(255,255,255,0.08); }
         .rem-pop .rp-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; color: #e8eef5; }
+        .tk-form { display: grid; gap: 10px; }
+        .tk-form .lbl { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
+        .tk-form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tk-form .input-styled, .task-card .input-styled { width: 100%; box-sizing: border-box; }
+        .tk-add { width: 100%; padding: 12px; font-size: 0.95rem; }
+        .task-card { margin-top: 10px; padding: 12px; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: rgba(255,255,255,0.025); }
+        .task-card .tk-top { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+        .task-card .tk-title { font-weight: 700; font-size: 1rem; flex: 1; min-width: 0; word-break: break-word; }
+        .task-card .tk-chip { display: inline-block; font-size: 0.74rem; padding: 2px 9px; border-radius: 999px; background: rgba(255,255,255,0.07); color: var(--text-muted); white-space: nowrap; }
+        .task-card .tk-chip.over { background: rgba(255,90,90,0.18); color: #ff9a9a; } .task-card .tk-chip.today { background: rgba(255,204,102,0.18); color: #ffd98a; }
+        .task-card .tk-sub { font-size: 0.8rem; color: var(--text-muted); margin: 5px 0 10px; }
+        .task-card .tk-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .tk-ov { margin-top: 14px; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; overflow: hidden; }
+        .tk-ov .hd { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); padding: 8px 12px; background: rgba(255,255,255,0.04); }
+        .tk-ov .row { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 9px 12px; border-top: 1px solid rgba(255,255,255,0.06); align-items: center; }
+        .tk-ov .dt { font-size: 0.82rem; line-height: 1.25; } .tk-ov .dt b { display: block; font-size: 0.95rem; }
+        .tk-ov .dt.over b { color: #ff9a9a; } .tk-ov .dt.today b { color: #ffd98a; }
+        .tk-ov .nm { font-weight: 600; font-size: 0.95rem; word-break: break-word; } .tk-ov .iv { font-size: 0.76rem; color: var(--text-muted); margin-top: 1px; }
+        .task-card .tk-act .btn-note { padding: 0 12px; height: 40px; white-space: nowrap; }
+        .task-card .tk-act { gap: 6px; flex-wrap: nowrap; } .task-card select.later { width: 84px; padding: 0 2px; font-size: 0.8rem; } .task-card .tk-act .btn-note.save { font-size: 0.82rem; } .task-card .tk-act .ic { min-width: 34px !important; padding: 0 4px !important; } .task-card .tk-act .btn-note.save { padding: 0 10px; }
+        .task-card .tk-act .ic { min-width: 38px; height: 40px; padding: 0 6px; border-radius: 12px; font-size: 1.05rem; }
+        .task-card select.later { height: 40px; width: auto; border-radius: 12px; padding: 0 10px; font-size: 0.85rem; }
+        .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+        .sw-row .sw-t { font-size: 0.92rem; } .sw-row .sw-s { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+        .sw { position: relative; flex: none; width: 46px; height: 28px; }
+        .sw input { appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0; transition: background .2s; position: absolute; inset: 0; cursor: pointer; }
+        .sw input:checked { background: #1fd6a0; }
+        .sw input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+        .sw input:checked::after { transform: translateX(18px); }
         .rep-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
         .rep-box .wd { display: flex; gap: 4px; flex-wrap: wrap; }
         .rep-box .wd label { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; font-size: 0.78rem; }
@@ -865,19 +894,25 @@
 
             <div class="glass-panel" id="taskPanel">
                 <div class="panel-title">📝 Eigene Erinnerungen</div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">Freier Text und frei wählbare Wiederholung – z. B. „Aktivkohle wechseln“ alle 30 Tage, jeden Sonntag oder jeden ersten Samstag im Monat.</div>
-                <input type="text" id="tk_text" class="input-styled" placeholder="Was soll erledigt werden? z. B. Aktivkohle wechseln">
-                <div id="tk_rep"></div>
-                <div class="prod-line" style="margin-top:6px;"><span>Erstmals am</span><input type="date" id="tk_date" class="input-styled" style="min-width:150px;"></div>
-                <div class="rec-meta">Datum leer = nächster passender Termin ab heute.</div>
-                <button type="button" class="btn-note save" style="margin-top:6px;" onclick="taskAdd()">➕ Erinnerung hinzufügen</button>
+                <div class="tk-form">
+                    <div><div class="lbl">Was?</div><input type="text" id="tk_text" class="input-styled" placeholder="z. B. Aktivkohle wechseln"></div>
+                    <div><div class="lbl">Wiederholung</div><div id="tk_rep"></div></div>
+                    <div class="two">
+                        <div><div class="lbl">Erstmals am</div><input type="date" id="tk_date" class="input-styled"></div>
+                        <div><div class="lbl">Uhrzeit</div><input type="time" id="tk_time" class="input-styled" value="09:00"></div>
+                    </div>
+                    <div class="rec-meta" style="margin:-4px 0 0;">Datum leer = nächster passender Termin. Uhrzeit leeren = ganztägig.</div>
+                    <button type="button" class="btn-note save tk-add" onclick="taskAdd()">➕ Erinnerung hinzufügen</button>
+                </div>
                 <div id="taskList"></div>
-                <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;">
-                    <label class="rem-opt"><input type="checkbox" id="opt_banner" onchange="setRemOpt('remBanner', this.checked)"><span>Hinweis oben einblenden, solange etwas fällig ist (bleibt, bis du ihn wegklickst oder alles erledigt ist)</span></label>
-                    <label class="rem-opt"><input type="checkbox" id="opt_sound" onchange="setRemOpt('remSound', this.checked)"><span>Ton beim Hinweis in der App (kurzer Signalton; auf dem iPhone nur, wenn die App gerade bedient wird)</span></label>
-                    <label class="rem-opt"><input type="checkbox" id="opt_notify" onchange="setRemOpt('remNotify', this.checked)"><span>Systemmitteilung beim Öffnen (Push, siehe Hinweis)</span></label>
-                    <div class="rec-meta">Hinweis: Die Mitteilung erscheint, sobald du die App öffnest oder wieder in den Vordergrund holst. Eine Mitteilung bei geschlossener App und gesperrtem Handy geht nur über den Kalender (📅) oder einen eigenen Push-Server. Auf dem iPhone brauchst du dafür die über „Zum Home-Bildschirm“ installierte App (iOS 16.4 oder neuer).</div>
-                    <button type="button" class="btn-note" style="margin-top:6px;" onclick="exportTaskIcs()">📅 Alle eigenen Erinnerungen in den Kalender</button>
+                <div style="margin-top:16px;">
+                    <div class="lbl" style="font-size:0.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);">Hinweise</div>
+                    <label class="sw-row"><span><div class="sw-t">Hinweis oben in der App</div><div class="sw-s">Bleibt, bis du ihn wegklickst oder alles erledigt ist</div></span><span class="sw"><input type="checkbox" id="opt_banner" onchange="setRemOpt('remBanner', this.checked)"></span></label>
+                    <label class="sw-row"><span><div class="sw-t">Signalton</div><div class="sw-s">Einmal pro Tag beim ersten Hinweis</div></span><span class="sw"><input type="checkbox" id="opt_sound" onchange="setRemOpt('remSound', this.checked)"></span></label>
+                    <label class="sw-row"><span><div class="sw-t">Systemmitteilung</div><div class="sw-s">Beim Öffnen der App, braucht deine Erlaubnis</div></span><span class="sw"><input type="checkbox" id="opt_notify" onchange="setRemOpt('remNotify', this.checked)"></span></label>
+                    <details style="margin-top:6px;"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-muted);">Gut zu wissen</summary>
+                        <div class="rec-meta">Hinweis und Mitteilung erscheinen, sobald du die App öffnest oder wieder in den Vordergrund holst. Bei geschlossener App und gesperrtem Handy meldet sich nur der Kalender (📅). Auf dem iPhone braucht die Systemmitteilung die über „Zum Home-Bildschirm“ installierte App (iOS 16.4 oder neuer). Der Signalton wird auf dem iPhone manchmal blockiert, solange du die App noch nicht angetippt hast.</div></details>
+                    <button type="button" class="btn-note" style="margin-top:10px;" onclick="exportTaskIcs()">📅 Alle in den Kalender</button>
                 </div>
             </div>
 
@@ -1764,7 +1799,7 @@
             });
             tasks.forEach(t => {
                 const st = taskStatus(t), label = `<b>${escapeHtml(t.text)}</b>`;
-                if (st.d <= 1) items.push({ d: st.d - 0.5, kind: 'task', id: t.id, bt: t.text, notify: t.notify !== false, html: `${label} – ${st.txt} <button type="button" class="btn-note save" style="margin-left:6px;" onclick="taskDone(${t.id})">✓ Erledigt</button>` });
+                if (st.d <= 1) items.push({ d: st.later ? 0.5 : st.d - 0.5, kind: 'task', id: t.id, bt: t.text, notify: t.notify !== false, html: `${label} – ${st.txt} <button type="button" class="btn-note save" style="margin-left:6px;" onclick="taskDone(${t.id})">✓ Erledigt</button>` });
             });
             let fuChanged = false;
             Object.keys(followups).forEach(k => {
@@ -1837,7 +1872,7 @@
             const wdBox = WD_SHORT.map((l, d) => d).sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)).map(d => `<label><input type="checkbox" class="${p}_wd" value="${d}"${(r.wd || []).includes(d) ? ' checked' : ''} onchange="${onch || ''}">${WD_SHORT[d]}</label>`).join('');
             const wdSel = `<select id="${p}_wd1" class="input-styled" onchange="${onch || ''}">${[1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}"${(r.wd || 0) === d && t === 'monthnth' ? ' selected' : ''}>${WD_LONG[d]}</option>`).join('')}</select>`;
             return `<div class="rep-box">
-                <select id="${p}_type" class="input-styled" onchange="repUi('${p}',1)${oc}">${opt('days', 'Alle X Tage')}${opt('weekly', 'Wöchentlich an Wochentag(en)')}${opt('monthday', 'Monatlich an einem Datum')}${opt('monthnth', 'Monatlich an einem Wochentag')}${opt('once', 'Einmalig')}</select>
+                <select id="${p}_type" class="input-styled" style="width:100%;" onchange="repUi('${p}',1)${oc}">${opt('days', 'Alle X Tage')}${opt('weekly', 'Jede Woche an …')}${opt('monthday', 'Jeden Monat am Datum …')}${opt('monthnth', 'Jeden Monat am Wochentag …')}${opt('once', 'Einmalig')}</select>
                 <span class="rp_${p} rp_days rp_weekly rp_monthday rp_monthnth"><span class="rp_l">alle</span> <input type="number" min="1" max="365" inputmode="numeric" id="${p}_n" class="input-styled" style="width:64px;" value="${n}" onchange="${onch || ''}"> <span class="rp_u" id="${p}_u">Tage</span></span>
                 <span class="rp_${p} rp_weekly wd">${wdBox}</span>
                 <span class="rp_${p} rp_monthday"><span>am</span> <input type="number" min="0" max="31" inputmode="numeric" id="${p}_day" class="input-styled" style="width:64px;" value="${r.day === 0 ? 0 : (r.day || 1)}" onchange="${onch || ''}"> <span>. (0 = letzter Tag)</span></span>
@@ -1859,6 +1894,8 @@
             if (t === 'monthday') { const d = parseInt(g('day').value, 10); return { type: 'monthday', n, day: isFinite(d) ? Math.min(Math.max(d, 0), 31) : 1 }; }
             return { type: 'monthnth', n, nth: parseInt(g('nth').value, 10) || 1, wd: parseInt(g('wd1').value, 10) };
         }
+        function timeOk(v) { return /^\d{2}:\d{2}$/.test(String(v || '')) ? v : ''; }
+        function taskDueTs(t) { const d = new Date(t.due); if (t.time) { const p = t.time.split(':'); d.setHours(+p[0], +p[1], 0, 0); } return d.getTime(); }
         function taskFirstDue(rep, dateStr) {
             let from = startOfDay(Date.now());
             if (dateStr) { const p = dateStr.split('-').map(Number); from = new Date(p[0], p[1] - 1, p[2]).getTime(); }
@@ -1869,7 +1906,7 @@
             const tx = document.getElementById('tk_text').value.trim();
             if (!tx) { alert('Bitte einen Text eingeben, z. B. „Aktivkohle wechseln“.'); return; }
             const rep = readRep('tk'), ds = document.getElementById('tk_date').value;
-            tasks.push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), text: tx, rep, due: taskFirstDue(rep, ds), notify: true });
+            tasks.push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), text: tx, rep, due: taskFirstDue(rep, ds), time: timeOk((document.getElementById('tk_time') || {}).value), notify: true });
             document.getElementById('tk_text').value = ''; document.getElementById('tk_date').value = '';
             saveTasks();
         }
@@ -1887,18 +1924,20 @@
             if (f === 'text') { v = String(v).trim(); if (!v) { renderTasks(); return; } t.text = v; }
             else if (f === 'rep') { t.rep = v; delete t.days; t.due = taskFirstDue(v, ''); }
             else if (f === 'notify') t.notify = !!v;
+            else if (f === 'time') t.time = timeOk(v);
             else if (f === 'due') { const p = String(v).split('-').map(Number); if (p.length === 3 && p[0]) t.due = new Date(p[0], p[1] - 1, p[2]).getTime(); }
             saveTasks();
         }
         function taskRepSave(id) { taskSet(id, 'rep', readRep('te' + id)); }
         function taskStatus(t) {
-            const d = Math.round((t.due - startOfDay(Date.now())) / DAY_MS);
+            const d = Math.round((t.due - startOfDay(Date.now())) / DAY_MS), at = t.time ? ` um ${t.time}` : '';
             if (d < -1) return { d, cls: 'over', txt: `seit ${-d} Tagen überfällig` };
             if (d === -1) return { d, cls: 'over', txt: 'seit gestern überfällig' };
-            if (d === 0) return { d, cls: 'today', txt: 'heute fällig' };
-            if (d === 1) return { d, cls: '', txt: 'morgen fällig' };
-            return { d, cls: '', txt: `fällig in ${d} Tagen` };
+            if (d === 0) { if (t.time && Date.now() < taskDueTs(t)) return { d, cls: 'today', txt: `heute um ${t.time}`, later: true }; return { d, cls: 'today', txt: t.time ? `heute fällig (${t.time})` : 'heute fällig' }; }
+            if (d === 1) return { d, cls: '', txt: `morgen${at}` };
+            return { d, cls: '', txt: `in ${d} Tagen${at}` };
         }
+        function fmtDayLong(ts) { return new Date(ts).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }); }
         function renderTasks() {
             const box = document.getElementById('taskList'); if (!box) return;
             const o1 = document.getElementById('opt_banner'), o2 = document.getElementById('opt_notify'), o3 = document.getElementById('opt_sound');
@@ -1907,27 +1946,34 @@
             if (o3) o3.checked = !!appSettings.remSound;
             const form = document.getElementById('tk_rep');
             if (form && !form.firstChild) { form.innerHTML = repEditorHtml('tk', { type: 'days', n: 30 }); repUi('tk'); }
-            const list = tasks.slice().sort((a, b) => a.due - b.due);
+            const list = tasks.slice().sort((a, b) => taskDueTs(a) - taskDueTs(b));
             const open = new Set([...document.querySelectorAll('#taskList details[open]')].map(d => d.id));
-            box.innerHTML = list.map(t => {
+            const ov = list.length ? `<div class="tk-ov"><div class="hd">Übersicht · ${list.length} ${list.length === 1 ? 'Erinnerung' : 'Erinnerungen'}</div>` + list.map(t => {
+                const st = taskStatus(t), d = new Date(t.due);
+                return `<div class="row"><div class="dt ${st.cls}"><b>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</b>${t.time ? t.time + ' Uhr' : 'ganztägig'}</div><div><div class="nm">${escapeHtml(t.text)}</div><div class="iv">${repLabel(taskRep(t))} · ${st.txt}</div></div></div>`;
+            }).join('') + '</div>' : '';
+            box.innerHTML = ov + list.map(t => {
                 const st = taskStatus(t), rep = taskRep(t), iso = new Date(t.due); const isoS = `${iso.getFullYear()}-${pad2(iso.getMonth() + 1)}-${pad2(iso.getDate())}`;
-                return `<div class="task-row">
-                    <input type="text" class="input-styled" value="${escapeHtml(t.text)}" onchange="taskSet(${t.id},'text',this.value)">
-                    <div class="tk-meta"><span class="tk-due ${st.cls}">${st.txt}</span> · ${fmtDay(t.due)} · ${repLabel(rep)}</div>
-                    <div class="task-btns">
+                return `<div class="task-card">
+                    <div class="tk-top"><div class="tk-title">${escapeHtml(t.text)}</div><span class="tk-chip ${st.cls}">${st.txt}</span></div>
+                    <div class="tk-sub">${fmtDayLong(t.due)}${t.time ? ' · ' + t.time + ' Uhr' : ''}</div>
+                    <div class="tk-act">
                         <button type="button" class="btn-note save" onclick="taskDone(${t.id})">✓ Erledigt</button>
-                        <button type="button" class="btn-note" onclick="taskSnooze(${t.id},1)">+1 Tag</button>
-                        <button type="button" class="btn-note" onclick="taskSnooze(${t.id},7)">+7 Tage</button>
-                        <button type="button" class="btn-note" onclick="exportTaskIcs(${t.id})">📅 Kalender</button>
-                        <button type="button" class="btn-note" onclick="taskSet(${t.id},'notify',${t.notify === false})">${t.notify === false ? '🔕 Mitteilung aus' : '🔔 Mitteilung an'}</button>
-                        <button type="button" class="btn-note" onclick="taskDel(${t.id})">🗑</button>
+                        <select class="input-styled later" onchange="if(this.value){taskSnooze(${t.id}, +this.value);}this.value=''"><option value="">⏰ Später</option><option value="1">Morgen</option><option value="3">In 3 Tagen</option><option value="7">In 1 Woche</option></select>
+                        <button type="button" class="btn-note ic" title="In den Kalender" onclick="exportTaskIcs(${t.id})">📅</button>
+                        <button type="button" class="btn-note ic" title="${t.notify === false ? 'Mitteilung aus' : 'Mitteilung an'}" onclick="taskSet(${t.id},'notify',${t.notify === false})" style="${t.notify === false ? 'opacity:.45;' : ''}">${t.notify === false ? '🔕' : '🔔'}</button>
+                        <button type="button" class="btn-note ic" title="Löschen" onclick="taskDel(${t.id})">🗑</button>
                     </div>
-                    <details id="te${t.id}d"${open.has('te' + t.id + 'd') ? ' open' : ''} style="margin-top:6px;"><summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted);">Wiederholung / Datum ändern</summary>
-                        ${repEditorHtml('te' + t.id, rep, `taskRepSave(${t.id})`)}
-                        <div class="prod-line" style="margin-top:6px;"><span>Nächster Termin</span><input type="date" class="input-styled" style="min-width:150px;" value="${isoS}" onchange="taskSet(${t.id},'due',this.value)"></div>
+                    <details id="te${t.id}d"${open.has('te' + t.id + 'd') ? ' open' : ''} style="margin-top:8px;"><summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted);">Bearbeiten</summary>
+                        <div class="tk-form" style="margin-top:8px;">
+                            <div><div class="lbl">Text</div><input type="text" class="input-styled" value="${escapeHtml(t.text)}" onchange="taskSet(${t.id},'text',this.value)"></div>
+                            <div><div class="lbl">Wiederholung</div>${repEditorHtml('te' + t.id, rep, `taskRepSave(${t.id})`)}</div>
+                            <div class="two"><div><div class="lbl">Nächster Termin</div><input type="date" class="input-styled" value="${isoS}" onchange="taskSet(${t.id},'due',this.value)"></div>
+                            <div><div class="lbl">Uhrzeit</div><input type="time" class="input-styled" value="${t.time || ''}" onchange="taskSet(${t.id},'time',this.value)"></div></div>
+                        </div>
                     </details>
                 </div>`;
-            }).join('') || '<div class="rec-meta" style="margin-top:8px;">Noch keine eigenen Erinnerungen.</div>';
+            }).join('') || '<div class="rec-meta" style="margin-top:10px;">Noch keine eigenen Erinnerungen.</div>';
             list.forEach(t => repUi('te' + t.id));
         }
         function remBeep() {
@@ -2009,8 +2055,9 @@
             let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Reeflog//DE\r\nCALSCALE:GREGORIAN\r\n';
             list.forEach(t => {
                 const rep = taskRep(t);
-                let start = new Date(Math.max(t.due, startOfDay(Date.now()))); start.setHours(10, 0, 0, 0);
-                if (start.getTime() < Date.now()) { start = new Date(rep.type === 'once' || rep.type === 'days' ? addDaysTs(Date.now(), 1) : repNext(rep, Date.now())); start.setHours(10, 0, 0, 0); }
+                const hh = t.time ? +t.time.split(':')[0] : 10, mm = t.time ? +t.time.split(':')[1] : 0;
+                let start = new Date(Math.max(t.due, startOfDay(Date.now()))); start.setHours(hh, mm, 0, 0);
+                if (start.getTime() < Date.now()) { start = new Date(rep.type === 'once' || rep.type === 'days' ? addDaysTs(Date.now(), 1) : repNext(rep, Date.now())); start.setHours(hh, mm, 0, 0); }
                 const end = new Date(start.getTime() + 30 * 60000);
                 ics += 'BEGIN:VEVENT\r\n' + `UID:reeflog-task-${t.id}@reeflog\r\n` + `DTSTAMP:${stamp}\r\n` + `DTSTART:${f(start)}\r\n` + `DTEND:${f(end)}\r\n` + rrule(rep) +
                     `SUMMARY:${esc(t.text)}\r\n` + 'DESCRIPTION:Reeflog – Erinnerung\r\n' +
