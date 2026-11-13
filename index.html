@@ -2865,13 +2865,12 @@
             if (!doseLayout) return;
             const r = ev.currentTarget.getBoundingClientRect(), x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
             const { from, to, L, R, W } = doseLayout;
-            if (x < L - 4 || x > W - R + 4) doseHover = null;
-            else {
-                // an den nächsten Punkt "einrasten", wenn einer in Reichweite ist (großzügiger Fangbereich für den Finger)
-                let best = null, bd = 30;
-                (doseLayout.pts || []).forEach(q => { const d = Math.abs(q.x - x); if (d < bd) { bd = d; best = q; } });
-                doseHover = best ? best.ts : from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
-            }
+            // erst an den nächsten Punkt "einrasten" (großzügiger Fangbereich, auch am linken/rechten Rand und über den Achsenbeschriftungen)
+            let best = null, bd = 34;
+            (doseLayout.pts || []).forEach(q => { const d = Math.abs(q.x - x); if (d < bd) { bd = d; best = q; } });
+            if (best) doseHover = best.ts;
+            else if (x < L - 4 || x > W - R + 4) doseHover = null;
+            else doseHover = from + Math.min(Math.max((x - L) / (W - L - R), 0), 1) * (to - from);
             renderDoseChart();
         }
 
