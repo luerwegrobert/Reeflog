@@ -2692,11 +2692,19 @@
             const mx = series.map(sr => sr.max).filter(x => x > 0);
             return (!mx.length || Math.max(...mx) / Math.min(...mx) <= 10) ? 'lin' : 'log';
         }
+        // Bildschirm-Diagramm: gleiche Einheit und ähnliche Größe -> eine gemeinsame Skala, sonst je Wert eine eigene Zeile ("Spur")
+        function doseLayoutMode(series) {
+            if (series.length < 2) return 'lin';
+            const u0 = doseUnit(series[0].k);
+            if (!series.every(sr => doseUnit(sr.k) === u0)) return 'lanes';
+            const mx = series.map(sr => sr.max).filter(x => x > 0);
+            return (!mx.length || Math.max(...mx) / Math.min(...mx) <= 3) ? 'lin' : 'lanes';
+        }
         function doseShared(series) { return doseMode(series) !== 'pct'; }
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
-            const L = 60, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+            const L = doseLayoutMode(series) === 'lanes' ? 78 : 60, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
             const unit0 = series.length ? doseUnit(series[0].k) : 'ml';
-            const mode = doseMode(series), single = mode !== 'pct';
+            const mode = doseLayoutMode(series), single = true;
             const ymax = mode === 'lin' ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
             let lgLo = 1, lgHi = 10;
             if (mode === 'log') {
@@ -2710,6 +2718,25 @@
             const Y = v => T + ph - (mode === 'log' ? lgY(v) : single ? v / ymax : v / 1) * ph;
             ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
             ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.lineWidth = 1;
+            // Spuren: jeder Wert bekommt eine eigene Zeile mit eigener Skala
+            const laneYv = {};
+            if (mode === 'lanes') {
+                const n = series.length, gap = 12, lh = (ph - gap * (n - 1)) / n;
+                series.forEach((sr, idx) => {
+                    const top = T + idx * (lh + gap), bot = top + lh, mx = niceMax(sr.max * 1.2), col = paramColors[sr.k];
+                    laneYv[sr.k] = v => bot - 3 - Math.min(v / mx, 1) * (lh - 12);
+                    ctx.fillStyle = 'rgba(255,255,255,0.035)'; ctx.fillRect(L, top, pw, lh);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(L, bot); ctx.lineTo(W - R, bot); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.beginPath(); ctx.moveTo(L, top + 9); ctx.lineTo(W - R, top + 9); ctx.stroke();
+                    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+                    let nm = String(doseLabel(sr.k)); if (nm.length > 9) nm = nm.slice(0, 8) + '…';
+                    ctx.font = 'bold 10.5px system-ui, sans-serif'; ctx.fillStyle = col; ctx.fillText(nm, L - 14, top + lh / 2 - 7);
+                    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.fillText(`bis ${fmtNum(mx)} ${doseUnit(sr.k)}`, L - 14, top + lh / 2 + 7);
+                });
+                ctx.font = '11px system-ui, sans-serif'; ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.fillStyle = 'rgba(200,215,225,0.7)';
+            }
+            if (mode !== 'lanes') {
             const ticks = [];
             if (mode === 'log') { for (let p = Math.log10(lgLo); p <= Math.log10(lgHi) + 1e-9; p++) ticks.push(Math.pow(10, p)); }
             const nT = mode === 'log' ? ticks.length - 1 : 4;
@@ -2720,6 +2747,7 @@
                 ctx.textAlign = 'right';
                 ctx.fillText(single ? fmtNum(Math.round(val * 100) / 100) + (i === nT ? ' ' + unit0 : '') : Math.round(val) + ' %', L - 6, yy);
             }
+            }
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
             for (let i = 0; i <= 3; i++) {
                 const ts = from + (to - from) * i / 3, d = new Date(ts);
@@ -2728,7 +2756,7 @@
             }
             series.forEach(sr => {
                 const col = paramColors[sr.k];
-                const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                const yv = mode === 'lanes' ? laneYv[sr.k] : (v => Y(v));
                 if (sr.bars) {
                     sr.pts.forEach(q => {
                         const px = X(q.ts), py = yv(q.v);
@@ -2751,7 +2779,7 @@
             });
             const layout = { from, to, L, R, W, pts: [], yv: {}, series, tip: null };
             series.forEach(sr => {
-                const yv = v => single ? Y(v) : T + ph - (v / sr.max) * ph;
+                const yv = mode === 'lanes' ? laneYv[sr.k] : (v => Y(v));
                 layout.yv[sr.k] = yv;
                 sr.pts.forEach(q => layout.pts.push({ x: X(q.ts), y: yv(q.v), ts: q.ts, k: sr.k }));
             });
@@ -2844,7 +2872,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (doseLayoutMode(series) === 'lanes' ? 'Jeder Wert hat seine eigene Zeile mit eigener Skala (unter dem Namen steht der Höchstwert der Zeile), damit nichts übereinander liegt. Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
