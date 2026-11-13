@@ -494,6 +494,8 @@
         .rem-pop .rp-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; color: #e8eef5; }
         .tk-form { display: grid; gap: 10px; }
         .tk-form .lbl { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
+        .tk-form .two > div, .tk-form > div { min-width: 0; }
+        .tk-form input[type=date], .tk-form input[type=time], .ms input[type=date], .ms input[type=time] { min-width: 0; max-width: 100%; display: block; -webkit-appearance: none; appearance: none; height: 44px; line-height: 44px; text-align: left; }
         .tk-form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .tk-form .input-styled, .task-card .input-styled { width: 100%; box-sizing: border-box; }
         .tk-add { width: 100%; padding: 12px; font-size: 0.95rem; }
@@ -509,6 +511,10 @@
         .ms .lbl { font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
         .ms-i { display: flex; align-items: center; gap: 5px; } .ms-i span { font-size: 0.8rem; color: var(--text-muted); }
         .ms .input-styled { width: 100%; box-sizing: border-box; min-width: 0; padding-left: 8px; padding-right: 6px; }
+        details.ov-g > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 0; margin-top: 8px; }
+        details.ov-g > summary::-webkit-details-marker { display: none; }
+        details.ov-g > summary .ov-grp { margin: 0; flex: 1; } details.ov-g > summary .chev { color: var(--text-muted); transition: transform .2s; } details.ov-g[open] > summary .chev { transform: rotate(90deg); }
+        details.ov-g > summary .ov-cnt { font-size: 0.72rem; color: var(--text-muted); }
         .ov-grp { font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin: 14px 0 6px; }
         .ov-row { border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; margin-bottom: 8px; background: rgba(255,255,255,0.025); }
         .ov-row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 70px 1fr 14px; gap: 10px; align-items: center; padding: 10px 12px; }
@@ -1981,7 +1987,13 @@
             return { d, cls: '', txt: `in ${d} Tagen${at}` };
         }
         function fmtDayLong(ts) { return new Date(ts).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }); }
+        let ovClosed = new Set((() => { try { return JSON.parse(localStorage.getItem('pepeaqua_ovclosed')) || []; } catch (e) { return []; } })());
+        function ovTog(g, isOpen) { if (isOpen) ovClosed.delete(g); else ovClosed.add(g); try { localStorage.setItem('pepeaqua_ovclosed', JSON.stringify([...ovClosed])); } catch (e) {} }
+        let ovHold = false, ovPending = false;
+        document.addEventListener('focusin', e => { const t = e.target; if (t && t.closest && t.closest('#ovList') && t.tagName === 'INPUT' && t.type !== 'checkbox') ovHold = true; });
+        document.addEventListener('focusout', e => { const t = e.target; if (ovHold && t && t.closest && t.closest('#ovList')) { ovHold = false; if (ovPending) { ovPending = false; setTimeout(renderTasks, 250); } } });
         function renderTasks() {
+            if (ovHold) { ovPending = true; return; }
             const box = document.getElementById('ovList'); if (!box) return;
             const o1 = document.getElementById('opt_banner'), o2 = document.getElementById('opt_notify'), o3 = document.getElementById('opt_sound');
             if (o1) o1.checked = appSettings.remBanner !== false;
@@ -2036,7 +2048,7 @@
                 return `<details class="ov-row" id="ov_${r.key}"${open.has('ov_' + r.key) ? ' open' : ''}><summary><div class="dt ${st.cls}">${dt}</div><div><div class="nm">${nm}</div><div class="iv">${iv}</div></div><span class="chev">›</span></summary><div class="ov-body task-card">${bodyH}</div></details>`;
             };
             let html = '';
-            [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<div class="ov-grp">${GN[g]} · ${rs.length}</div>` + rs.map(rowHtml).join(''); });
+            [0, 1, 2].forEach(g => { const rs = rows.filter(r => grp(r) === g); if (rs.length) html += `<details class="ov-g" id="ovg_${g}"${ovClosed.has(g) ? '' : ' open'} ontoggle="ovTog(${g}, this.open)"><summary><span class="chev">›</span><div class="ov-grp">${GN[g]} · ${rs.length}</div></summary>` + rs.map(rowHtml).join('') + '</details>'; });
             box.innerHTML = html || '<div class="rec-meta" style="margin-top:10px;">Noch nichts geplant. Lege unten eine Erinnerung an oder richte Messungen ein.</div>';
             tasks.forEach(t => repUi('te' + t.id));
             Object.keys(reminders).forEach(k => { if (document.getElementById('mo_' + k + '_type')) repUi('mo_' + k); });
