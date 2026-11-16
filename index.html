@@ -3128,7 +3128,7 @@
         }
         function doseShared(series) { return doseMode(series) !== 'pct'; }
         function drawDoseChart(ctx, W, H, series, from, to, hover) {
-            const L = doseLayoutMode(series) === 'lanes' ? 78 : 74, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+            const L = doseLayoutMode(series) === 'lanes' ? 94 : 74, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
             const unit0 = series.length ? doseUnit(series[0].k) : 'ml';
             const mode = doseLayoutMode(series), single = true;
             const ymax = mode === 'lin' ? niceMax(Math.max(...series.map(sr => sr.max)) * 1.15) : 100;
