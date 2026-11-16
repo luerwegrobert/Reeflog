@@ -808,6 +808,9 @@
                 content: " - Offizieller Analysebericht" !important;
             }
         }
+            .app-toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); max-width: min(92vw, 420px); padding: 12px 18px; border-radius: 14px; background: rgba(20, 40, 36, 0.96); border: 1px solid #5ee6c6; color: #f0f4f8; font-size: 0.95rem; font-weight: 600; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 9999; }
+        .app-toast.show { opacity: 1; transform: translate(-50%, 0); }
+        .app-toast.warn { background: rgba(48, 22, 28, 0.96); border-color: #ff6b81; }
     </style>
 </head>
 <body>
@@ -3080,10 +3083,12 @@
             dosingLog.push({ ts, slot, v: n, kind: 'once' });
             saveDosing(); syncAio(); renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
+            showToast('✅ Gabe eingetragen: ' + fmtNum(n) + ' ' + ((appSettings.products[slot] || {}).unit || 'ml'));
         }
         function deleteGabe(i) {
             dosingLog.splice(i, 1); saveDosing(); renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
+            showToast('Gabe gelöscht');
         }
         function deleteDose(i) {
             const slot = dosingLog[i] && dosingLog[i].slot;
@@ -3110,6 +3115,7 @@
             saveDosing(); saveSettings(); syncAio();
             renderProductSettings(); renderDoseChart();
             if (typeof renderRecommendations === 'function') renderRecommendations();
+            showToast('✅ Nachgetragen: ' + fmtNum(n) + ' ' + ((p && p.unit) || 'ml') + ' ab ' + pad2(+m[3]) + '.' + pad2(+m[2]) + '.' + m[1]);
         }
 
         // gemeinsame Mengenachse nur, wenn Einheit gleich und Größenordnung ähnlich (sonst Prozent)
@@ -3391,8 +3397,9 @@
                         </div>
                         ${dosingLog.map((e, i) => ({ e, i })).filter(x => x.e.kind === 'once' && x.e.slot === slot).sort((a, b) => b.e.ts - a.e.ts).slice(0, 5).map(({ e, i }) => { const d = new Date(e.ts); return `<div class="rem-row" style="justify-content:space-between;"><span>${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} · ${fmtNum(e.v)} ${escapeHtml(p.unit || 'ml')}</span><button type="button" class="thr-link" onclick="deleteGabe(${i})">löschen</button></div>`; }).join('') || '<div class="rec-meta">Noch keine Gabe eingetragen.</div>'}` : `<div class="prod-line">
                             <span>Meine Tagesdosis:</span>
-                            <input type="number" step="any" inputmode="decimal" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onchange="setProduct('${slot}','daily',this.value)">
+                            <input type="number" step="any" inputmode="decimal" id="dd_${slot}" class="input-styled" placeholder="z. B. 2" value="${p.daily || ''}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDaily('${slot}')}">
                             <span>${escapeHtml(p.unit || 'ml')} pro Tag (für dein Nettovolumen)</span>
+                            <button type="button" class="btn-note save" onclick="saveDaily('${slot}')">✅ Speichern</button>
                         </div>
                         <div class="prod-line">
                             <span>Nachtragen ab</span>
@@ -3401,7 +3408,7 @@
                             <span>${escapeHtml(p.unit || 'ml')}</span>
                             <button type="button" class="btn-note save" onclick="addDailyFrom('${slot}')">➕ Eintragen</button>
                         </div>
-                        <div class="rec-meta">Die Tagesdosis gilt ab dem gewählten Tag (auch rückwirkend) und läuft dann täglich weiter, bis ein neuer Eintrag folgt.</div>`);
+                        <div class="rec-meta">Tippe auf „Speichern“, damit die Tagesdosis übernommen wird. Sie gilt sofort und läuft täglich weiter, bis du sie änderst. Mit „Nachtragen ab“ trägst du sie für einen früheren Tag nach.</div>`);
         }
 
         function calcDose(slot, delta) {
@@ -3418,6 +3425,24 @@
             const a = g('cc_' + slot), t = g('ct_' + slot);
             if (!isFinite(a) || !isFinite(t)) return null;
             return slot.endsWith('_up') ? t - a : a - t;
+        }
+        let toastTimer = null;
+        function showToast(msg, warn) {
+            let t = document.getElementById('appToast');
+            if (!t) { t = document.createElement('div'); t.id = 'appToast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+            t.textContent = msg; t.className = 'app-toast show' + (warn ? ' warn' : '');
+            clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'app-toast'; }, 2600);
+        }
+        function saveDaily(slot) {
+            const el = document.getElementById('dd_' + slot); if (!el) return;
+            const raw = String(el.value).trim().replace(',', '.'), n = parseFloat(raw), p = appSettings.products[slot] || {}, u = p.unit || 'ml';
+            if (raw === '' || !isFinite(n) || n < 0) { showToast('Bitte eine Menge eingeben (0 = keine Dosierung).', true); el.focus(); return; }
+            const before = p.daily || 0;
+            if (n === before) { showToast('Unverändert: ' + fmtNum(n) + ' ' + u + ' pro Tag'); return; }
+            setProduct(slot, 'daily', String(n));
+            renderProductSettings(); renderDoseChart();
+            if (typeof renderRecommendations === 'function') renderRecommendations();
+            showToast(n > 0 ? '✅ Gespeichert: ' + fmtNum(n) + ' ' + u + ' pro Tag' : '✅ Gespeichert: keine Dosierung');
         }
         function calcShow(slot) {
             const o = document.getElementById('cr_' + slot); if (!o) return;
