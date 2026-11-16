@@ -3045,7 +3045,7 @@
         // Die erste Eingabe gilt ab dem Tag selbst (die Dosierung lief ja schon), jede spätere Änderung ab dem Folgetag
         const AIO_KEYS = ['kh', 'ca', 'mg'];
         function doseSlotOf(slot) { const p = appSettings.products && appSettings.products[slot]; return p && p.aio ? 'aio_up' : slot; }
-        function doseLabel(k) { return k === 'aio' ? 'All4Reef' : (String(k).endsWith('_down') ? (thresholds[baseKey(k)] ? thresholds[baseKey(k)].label : k) + ' senken' : (thresholds[k] ? thresholds[k].label : k)); }
+        function doseLabel(k, plain) { return k === 'aio' ? 'All4Reef' : (String(k).endsWith('_down') ? (thresholds[baseKey(k)] ? thresholds[baseKey(k)].label : k) + (plain ? ' senken' : ' ⬇️') : (thresholds[k] ? thresholds[k].label + (DOWN_DOSE.includes(k) ? (plain ? ' erhöhen' : ' ⬆️') : '') : k)); }
         function doseActive() {
             const out = [], pr = appSettings.products || {};
             if ((pr.aio_up && pr.aio_up.daily > 0) || dosingLog.some(e => e.slot === 'aio_up')) out.push('aio');
@@ -3162,7 +3162,7 @@
                     ctx.beginPath(); ctx.moveTo(L, bot); ctx.lineTo(W - R, bot); ctx.stroke();
                     ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.beginPath(); ctx.moveTo(L, top + 9); ctx.lineTo(W - R, top + 9); ctx.stroke();
                     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-                    let nm = String(doseLabel(sr.k)); if (nm.length > 9) nm = nm.slice(0, 8) + '…';
+                    let nm = String(doseLabel(sr.k)); if (nm.length > (/[⬇⬆]/.test(nm) ? 12 : 9)) nm = nm.slice(0, 8) + '…';
                     ctx.font = 'bold 10.5px system-ui, sans-serif'; ctx.fillStyle = col; ctx.fillText(nm, L - 14, top + lh / 2 - 7);
                     ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(200,215,225,0.7)'; ctx.fillText(`${rng} ${doseUnit(sr.k)}`, L - 14, top + lh / 2 + 7);
                 });
@@ -3695,7 +3695,7 @@
                     const fd = ts => { const d = new Date(ts); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`; };
                     rowsD.forEach(r => {
                         ensure(18);
-                        text(dc[0] + 3, y - 10, doseLabel(r.k), 9.5, 'F2');
+                        text(dc[0] + 3, y - 10, doseLabel(r.k, true), 9.5, 'F2');
                         text(dc[1] + 3, y - 10, (r.p.name || '-').slice(0, 30), 9);
                         const u = r.p.unit || 'ml';
                         text(dc[2] + 3, y - 10, r.cur ? (r.cur.v > 0 ? `${num(r.cur.v)} ${u} ${r.cur.once ? '(letzte Einmal-Gabe)' : 'pro Tag'}` : 'keine Dosierung') : '-', 9.5, 'F2');
@@ -3749,7 +3749,7 @@
                         const jb = b64bytes(tmp.toDataURL('image/jpeg', 0.92).split(',')[1]);
                         const cw = W - 2 * M, ch = cw * lh / lw;
                         const rn = { 7: '7 Tage', 30: '1 Monat', 90: '3 Monate', 365: '12 Monate' }[doseRange] || doseRange + ' Tage';
-                        const cap = wrap(`Zeitraum: ${rn} · ${doseMode(series) === 'pct' ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : doseMode(series) === 'log' ? 'Logarithmische Mengenachse. ' : ''}Parameter: ${series.map(q => doseLabel(q.k)).join(', ')}`, 9, false, W - 2 * M);
+                        const cap = wrap(`Zeitraum: ${rn} · ${doseMode(series) === 'pct' ? 'Jede Kurve ist auf ihren Höchstwert im Zeitraum bezogen (100 %). ' : doseMode(series) === 'log' ? 'Logarithmische Mengenachse. ' : ''}Parameter: ${series.map(q => doseLabel(q.k, true)).join(', ')}`, 9, false, W - 2 * M);
                         ensure(ch + cap.length * 12 + 8);
                         cap.forEach(l => { text(M, y - 9, l, 9, 'F1', '0.35 0.4 0.45 rg'); y -= 12; });
                         y -= 4;
@@ -3769,7 +3769,7 @@
                             const d = new Date(e.ts);
                             ensure(16);
                             text(lc[0] + 3, y - 9, `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`, 9);
-                            text(lc[1] + 3, y - 9, doseLabel(k), 9, 'F2');
+                            text(lc[1] + 3, y - 9, doseLabel(k, true), 9, 'F2');
                             text(lc[2] + 3, y - 9, (p.name || '-').slice(0, 32), 9);
                             text(lc[3] + 3, y - 9, e.kind === 'once' ? `${num(e.v)} ${p.unit || 'ml'} Einmal-Gabe` : (e.v > 0 ? `${num(e.v)} ${p.unit || 'ml'} pro Tag` : 'keine Dosierung'), 9);
                             hline(y - 12);
