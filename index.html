@@ -3029,7 +3029,9 @@
         function logDose(slot, v) {
             const last = doseEvents(keyOfSlot(slot)).pop();
             if (last ? last.v === v : v === 0) return;
-            dosingLog.push({ ts: Date.now(), slot, v });
+            // Änderung gilt sofort (auch mehrfach am Tag); die allererste Eingabe gilt ab Tagesbeginn, die Dosierung lief ja schon
+            const now = Date.now();
+            dosingLog.push({ ts: now, slot, v, eff: last ? now : startOfDay(now) });
             saveDosing();
         }
         function seedDosing() {
@@ -3320,7 +3322,7 @@
             document.getElementById('doseLogList').innerHTML = rows.length ? rows.map(({ e, i }) => {
                 const k = keyOfSlot(e.slot), d = new Date(e.ts);
                 const p = appSettings.products[e.slot] || {};
-                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${escapeHtml(doseLabel(k))}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${(e.kind === 'once' || e.eff !== undefined) ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' + (e.eff !== undefined ? ' (ab diesem Tag)' : '') : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
+                return `<div class="rem-row" style="justify-content:space-between;"><span><b style="color:${paramColors[k]}">${escapeHtml(doseLabel(k))}</b> ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}${(e.kind === 'once' || (e.eff !== undefined && e.eff !== e.ts && e.eff !== startOfDay(e.ts))) ? '' : ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())} · ${e.kind === 'once' ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' Einmal-Gabe' : (e.v > 0 ? fmtNum(e.v) + ' ' + (p.unit || 'ml') + ' pro Tag' + (e.eff !== undefined && e.eff !== e.ts && e.eff !== startOfDay(e.ts) ? ' (ab diesem Tag)' : '') : 'keine Dosierung')}</span><button type="button" class="thr-link" onclick="deleteDose(${i})">löschen</button></div>`;
             }).join('') : '<div class="rec-meta">Noch keine Einträge.</div>';
 
             const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
@@ -3334,7 +3336,7 @@
             const { series, from, to } = doseSeriesFor(doseRange, doseSel);
             document.getElementById('doseEmpty').style.display = series.length ? 'none' : 'flex';
             document.getElementById('doseHint').textContent = series.length
-                ? (doseLayoutMode(series) === 'lanes' ? 'Jeder Wert hat seine eigene Zeile mit eigener Skala (unter dem Namen steht der Wertebereich der Zeile, die Höhe ist darauf angepasst), damit nichts übereinander liegt. Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Eine Änderung der Tagesdosis gilt ab dem Folgetag. Ohne Änderung bleibt die Dosierung unverändert.')
+                ? (doseLayoutMode(series) === 'lanes' ? 'Jeder Wert hat seine eigene Zeile mit eigener Skala (unter dem Namen steht der Wertebereich der Zeile, die Höhe ist darauf angepasst), damit nichts übereinander liegt. Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'pct' ? 'Mehrere Werte mit unterschiedlichen Einheiten: jede Kurve ist auf ihren eigenen Höchstwert im Zeitraum bezogen (100 %). Tippe auf einen Punkt oder eine Linie für die echten Mengen.' : doseMode(series) === 'log' ? 'Die Mengen unterscheiden sich stark, deshalb ist die Achse logarithmisch (1 – 10 – 100 …). So bleiben kleine und große Mengen in ml lesbar. Tippe auf einen Punkt oder eine Linie für die genauen Werte.' : 'Tippe auf einen Punkt oder eine Linie für den genauen Wert, nochmal tippen schließt die Anzeige. Jede Änderung der Dosierung gilt sofort und erscheint gleich im Verlauf. Ohne Änderung bleibt die Dosierung unverändert.')
                 : 'Trage im Bereich „Produkte & Dosierung“ unten deine Tagesdosis oder Einmal-Gabe ein, dann entsteht hier dein Verlauf.';
             doseLayout = series.length ? drawDoseChart(ctx, W, H, series, from, to, doseHover) : null;
         }
@@ -3758,7 +3760,7 @@
                     }
                     if (log.length) {
                         ensure(30);
-                        text(M, y - 9, 'Dosierungen (Tagesdosis-Änderungen gelten ab dem Folgetag, Einmal-Gaben am Tag der Gabe)', 9.5, 'F2');
+                        text(M, y - 9, 'Dosierungen (Änderungen gelten ab dem Zeitpunkt der Eingabe, Einmal-Gaben am Tag der Gabe)', 9.5, 'F2');
                         y -= 18;
                         const lc = [M, M + 85, M + 185, M + 355];
                         rect(M, y - 13, W - 2 * M, 16, '0.92 0.94 0.96 rg');
